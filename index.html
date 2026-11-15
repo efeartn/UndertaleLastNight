@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UNDERTALE: LAST NIGHT</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="hud-bar" aria-label="Game controls">
+      <div class="hud-brand">
+        <span class="soul-dot" aria-hidden="true">♥</span>
+        <span class="brand-title">UNDERTALE: LAST NIGHT</span>
+      </div>
+      <div class="hud-actions">
+        <button id="btnMute" class="hud-btn" type="button" title="Toggle Audio (M)">🔊 Audio: ON</button>
+        <button id="btnCRT" class="hud-btn" type="button" title="Toggle CRT Scanlines">📺 CRT: OFF</button>
+        <button id="btnAssist" class="hud-btn" type="button" title="Toggle Practice Assist (No Death)">🛡 Assist: OFF</button>
+        <div class="phase-jump-group" aria-label="Quick Phase Jump">
+          <span class="hud-label">Practice:</span>
+          <button id="btnJumpOverworld" class="hud-btn hud-btn-sm" type="button">Hall</button>
+          <button id="btnJumpP1" class="hud-btn hud-btn-sm" type="button">P1</button>
+          <button id="btnJumpP2" class="hud-btn hud-btn-sm" type="button">P2</button>
+          <button id="btnJumpP3" class="hud-btn hud-btn-sm" type="button">P3</button>
+          <button id="btnJumpP4" class="hud-btn hud-btn-sm" type="button" title="Jump to Phase 4 (Void Fracture)">P4</button>
+          <button id="btnAttackSelect" class="hud-btn hud-btn-sm" type="button" title="Browse & Practice All 15 Attacks">🎯 Attacks</button>
+          <button id="btnEndless" class="hud-btn hud-btn-sm" type="button" title="Endless Survival Mode (Phases 2-4)">Endless</button>
+        </div>
+        <button id="btnFullscreen" class="hud-btn" type="button" title="Fullscreen">⛶ Full</button>
+      </div>
+    </header>
+
+    <main class="stage-wrap">
+      <div id="canvasShell" class="canvas-shell">
+        <canvas id="gameCanvas" width="640" height="480" tabindex="0"></canvas>
+        <div id="crtOverlay" class="crt-overlay hidden" aria-hidden="true"></div>
+      </div>
+
+      <div class="controls-strip">
+        <span><strong>Move:</strong> Arrows / WASD</span>
+        <span><strong>Confirm:</strong> Z / Enter</span>
+        <span><strong>Cancel / Skip:</strong> X / Shift</span>
+        <span><strong>Menu:</strong> C / Esc</span>
+      </div>
+
+      <!-- Touch / Mouse Fallback Pad -->
+      <div class="touch-controls" aria-label="On-screen controls">
+        <div class="dpad">
+          <button class="pad-btn pad-up" data-key="ArrowUp" type="button">▲</button>
+          <div class="dpad-mid">
+            <button class="pad-btn pad-left" data-key="ArrowLeft" type="button">◀</button>
+            <button class="pad-btn pad-down" data-key="ArrowDown" type="button">▼</button>
+            <button class="pad-btn pad-right" data-key="ArrowRight" type="button">▶</button>
+          </div>
+        </div>
+        <div class="action-buttons">
+          <button class="act-btn act-z" data-key="KeyZ" type="button">Z<small>OK</small></button>
+          <button class="act-btn act-x" data-key="KeyX" type="button">X<small>BACK</small></button>
+          <button class="act-btn act-c" data-key="KeyC" type="button">C<small>MENU</small></button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
