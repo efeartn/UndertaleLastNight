@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" shape-rendering="crispEdges">
+  <!-- Outer Obsidian Frame -->
+  <rect x="0" y="0" width="32" height="32" fill="#05050a" />
+  <!-- Void Chromatic Offset (4th-wall accent) -->
+  <rect x="3" y="2" width="27" height="27" fill="none" stroke="#c084fc" stroke-width="1" opacity="0.7" />
+  <rect x="1" y="3" width="27" height="27" fill="none" stroke="#2ce8f5" stroke-width="1" opacity="0.6" />
+  <!-- Undertale Battle Box Border -->
+  <rect x="2" y="2" width="28" height="28" fill="#090714" stroke="#ffffff" stroke-width="2" />
+
+  <!-- Twilight Gold & Void Stars -->
+  <rect x="5" y="5" width="1" height="1" fill="#ffef3f" />
+  <rect x="26" y="6" width="1" height="1" fill="#ffef3f" />
+  <rect x="6" y="25" width="1" height="1" fill="#c084fc" />
+  <rect x="25" y="25" width="1" height="1" fill="#2ce8f5" />
+
+  <!-- Symmetric 16x13 Pixel Determination Heart -->
+  <path fill="#ff1e2d" d="M10,9 h4 v1 h1 v1 h2 v-1 h1 v-1 h4 v1 h1 v1 h1 v4 h-1 v1 h-1 v1 h-1 v1 h-1 v1 h-1 v1 h-1 v1 h-1 v1 h-2 v-1 h-1 v-1 h-1 v-1 h-1 v-1 h-1 v-1 h-1 v-1 h-1 v-1 h-1 v-4 h1 v-1 h1 z" />
+
+  <!-- Heart Specular Highlight & Deep Shade -->
+  <rect x="10" y="10" width="2" height="1" fill="#ff8590" />
+  <rect x="9" y="11" width="1" height="2" fill="#ff8590" />
+  <rect x="15" y="20" width="2" height="1" fill="#990918" />
+  <rect x="19" y="17" width="2" height="1" fill="#990918" />
+  <rect x="22" y="12" width="1" height="3" fill="#b30b1d" />
+
+  <!-- Glowing Cyan / Void Fracture Slicing the SOUL -->
+  <rect x="16" y="11" width="1" height="2" fill="#2ce8f5" />
+  <rect x="15" y="13" width="1" height="2" fill="#ffffff" />
+  <rect x="16" y="15" width="2" height="2" fill="#2ce8f5" />
+  <rect x="15" y="17" width="1" height="2" fill="#c084fc" />
+  <rect x="16" y="19" width="1" height="2" fill="#ffffff" />
+</svg>

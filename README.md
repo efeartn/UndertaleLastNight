@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/og-preview.png" alt="UNDERTALE: LAST NIGHT Banner" width="760">
+</p>
+
 # UNDERTALE: LAST NIGHT
 
 A playable browser-based **Undertale** fan game built with HTML5 Canvas, zero external dependencies, pure ES Modules, and procedural Web Audio soundtrack & sound effects.

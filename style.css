@@ -60,6 +60,15 @@ body {
   letter-spacing: 0.6px;
 }
 
+.brand-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(44, 232, 245, 0.45));
+}
+
 .soul-dot {
   color: var(--soul);
   font-size: 14px;

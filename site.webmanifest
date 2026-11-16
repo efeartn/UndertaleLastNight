@@ -1,0 +1,21 @@
+{
+  "name": "UNDERTALE: LAST NIGHT",
+  "short_name": "Last Night",
+  "description": "Playable 4-phase Undertale fan game with 16 attacks, original 138-168 BPM synth OST, and 4th-wall W.D. Gaster Void anomalies.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#050508",
+  "theme_color": "#050508",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
