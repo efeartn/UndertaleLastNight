@@ -557,17 +557,29 @@ export class OverworldEngine {
       if (count > 2) {
         if (input.justPressed('ArrowLeft') || input.justPressed('KeyA')) {
           const next = dlg.choiceIdx ^ 1;
-          if (next < count) dlg.choiceIdx = next;
+          dlg.choiceIdx = next < count ? next : (dlg.choiceIdx - 1 + count) % count;
           audio.menuMove();
         } else if (input.justPressed('ArrowRight') || input.justPressed('KeyD')) {
           const next = dlg.choiceIdx ^ 1;
-          if (next < count) dlg.choiceIdx = next;
+          dlg.choiceIdx = next < count ? next : (dlg.choiceIdx + 1) % count;
           audio.menuMove();
         } else if (input.justPressed('ArrowUp') || input.justPressed('KeyW')) {
-          dlg.choiceIdx = (dlg.choiceIdx - 2 + count) % count;
+          if (dlg.choiceIdx - 2 >= 0) {
+            dlg.choiceIdx -= 2;
+          } else {
+            let target = Math.floor((count - 1) / 2) * 2 + (dlg.choiceIdx % 2);
+            if (target >= count) target = count - 1;
+            dlg.choiceIdx = target;
+          }
           audio.menuMove();
         } else if (input.justPressed('ArrowDown') || input.justPressed('KeyS')) {
-          dlg.choiceIdx = (dlg.choiceIdx + 2) % count;
+          if (dlg.choiceIdx + 2 < count) {
+            dlg.choiceIdx += 2;
+          } else if (dlg.choiceIdx < 2 && count > 2) {
+            dlg.choiceIdx = count - 1;
+          } else {
+            dlg.choiceIdx = dlg.choiceIdx % 2;
+          }
           audio.menuMove();
         }
       } else {
@@ -1107,6 +1119,114 @@ export class OverworldEngine {
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, 640, 480);
       drawSoul(ctx, sx, sy, 'red', { scale: 1.05 });
+    }
+  }
+
+  handlePointerMove(x, y) {
+    if (this.dialogue) {
+      const dlg = this.dialogue;
+      const current = dlg.lines[dlg.idx];
+      if (dlg.charIdx >= current.text.length && current.choices && current.choices.length > 0) {
+        const count = current.choices.length;
+        const textStartX = current.portrait ? 144 : 56;
+        if (count > 2) {
+          if (y >= 394 && y <= 462 && x >= textStartX) {
+            const col = x >= textStartX + 220 ? 1 : 0;
+            const row = y >= 427 ? 1 : 0;
+            const picked = row * 2 + col;
+            if (picked < count && dlg.choiceIdx !== picked) {
+              dlg.choiceIdx = picked;
+              audio.menuMove();
+            }
+          }
+        } else if (y >= 412 && y <= 456 && x >= textStartX) {
+          const col = x >= textStartX + 220 ? 1 : 0;
+          if (col < count && dlg.choiceIdx !== col) {
+            dlg.choiceIdx = col;
+            audio.menuMove();
+          }
+        }
+      }
+      return;
+    }
+
+    if (this.fieldMenu) {
+      const fm = this.fieldMenu;
+      if (x >= 28 && x <= 180 && y >= 166 && y <= 332) {
+        const i = Math.floor((y - 178) / 34);
+        if (i >= 0 && i < 4 && fm.tab === 'MAIN' && fm.idx !== i) {
+          fm.idx = i;
+          audio.menuMove();
+        }
+      } else if (fm.tab === 'ITEM' && x >= 194 && x <= 554 && y >= 50 && y <= 310) {
+        const idx = Math.floor((y - 54) / 31);
+        if (idx >= 0 && idx < this.inventory.length && fm.subIdx !== idx) {
+          fm.subIdx = idx;
+          audio.menuMove();
+        }
+      }
+    }
+  }
+
+  handlePointerDown(x, y, input) {
+    const fireKey = (code) => {
+      if (input.tap) input.tap(code);
+      else input.triggerPress(code);
+    };
+    this.handlePointerMove(x, y);
+
+    if (this.dialogue) {
+      const dlg = this.dialogue;
+      const current = dlg.lines[dlg.idx];
+      if (y >= 314 && y <= 462 && x >= 32 && x <= 608) {
+        if (dlg.charIdx < current.text.length) {
+          dlg.charIdx = current.text.length;
+        } else {
+          fireKey('KeyZ');
+        }
+      }
+      return;
+    }
+
+    if (this.fieldMenu) {
+      const fm = this.fieldMenu;
+      if (x >= 28 && x <= 180 && y >= 166 && y <= 332) {
+        const i = Math.floor((y - 178) / 34);
+        if (i >= 0 && i < 4) {
+          const options = ['ITEM', 'STAT', 'CELL', 'TITLE'];
+          audio.menuSelect();
+          if (options[i] === 'TITLE') {
+            this.fieldMenu = null;
+            this.onReturnTitle();
+          } else {
+            fm.idx = i;
+            fm.tab = options[i];
+            fm.subIdx = 0;
+          }
+        }
+        return;
+      }
+      if (fm.tab === 'ITEM' && x >= 194 && x <= 554 && y >= 50 && y <= 310 && this.inventory.length > 0) {
+        const idx = Math.floor((y - 54) / 31);
+        if (idx >= 0 && idx < this.inventory.length) {
+          fm.subIdx = idx;
+          fireKey('KeyZ');
+        }
+        return;
+      }
+      if (fm.tab === 'CELL' && x >= 194 && x <= 554 && y >= 50 && y <= 130) {
+        fireKey('KeyZ');
+        return;
+      }
+      if (x < 28 || x > 606 || y < 36 || y > 350) {
+        audio.menuMove();
+        this.fieldMenu = null;
+      }
+      return;
+    }
+
+    if (!this.transition && y >= 436 && y <= 472 && x >= 190 && x <= 450) {
+      fireKey('KeyZ');
     }
   }
 }

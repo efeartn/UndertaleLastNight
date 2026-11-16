@@ -19,10 +19,11 @@ export const ATTACK_NAMES = [
   'yellowShooterCorridor',
   'gasterHandMatrix',
   'finalGambitAndSleep',
-  // Phase 4 / Secret (12..14)
+  // Phase 4 / Secret (12..15)
   'greenShieldStorm',
   'yellowBlasterBreakout',
-  'gasterDualFinale'
+  'gasterDualFinale',
+  'voidSingularity'
 ];
 
 export const ATTACK_META = [
@@ -32,6 +33,7 @@ export const ATTACK_META = [
     title: 'Opening Bad Time',
     phase: 1,
     soulMode: 'blue',
+    stars: 2,
     desc: 'Blue slam opener into sweeping bone tunnel & 4-corner Gaster Blasters'
   },
   {
@@ -40,6 +42,7 @@ export const ATTACK_META = [
     title: 'Blue & Orange Signs',
     phase: 1,
     soulMode: 'blue',
+    stars: 2,
     desc: 'Rhythmic White bone hops, Blue freeze gates & Orange motion sweeps'
   },
   {
@@ -48,6 +51,7 @@ export const ATTACK_META = [
     title: 'Platform Peril',
     phase: 1,
     soulMode: 'blue',
+    stars: 3,
     desc: 'Multi-tier moving platforms over floor spikes & dual-lane blasters'
   },
   {
@@ -56,6 +60,7 @@ export const ATTACK_META = [
     title: 'Blaster Carousel',
     phase: 1,
     soulMode: 'red',
+    stars: 3,
     desc: '360-degree rotating Gaster Blaster ring & crossfire finale'
   },
   {
@@ -64,6 +69,7 @@ export const ATTACK_META = [
     title: 'Four-Way Slam',
     phase: 1,
     soulMode: 'blue',
+    stars: 3,
     desc: 'Telegraphed 4-wall gravity slams with instant wall bone eruptions'
   },
   {
@@ -72,6 +78,7 @@ export const ATTACK_META = [
     title: 'Sine Bone Corridor',
     phase: 2,
     soulMode: 'red',
+    stars: 3,
     desc: 'Oscillating bone wave corridor inside a smoothly swaying Battle Box'
   },
   {
@@ -80,6 +87,7 @@ export const ATTACK_META = [
     title: 'Green Shield Barrage',
     phase: 2,
     soulMode: 'green',
+    stars: 3,
     desc: 'Directional spear deflection with a healing green spear'
   },
   {
@@ -88,6 +96,7 @@ export const ATTACK_META = [
     title: 'Bone Wheel Lab',
     phase: 2,
     soulMode: 'red',
+    stars: 4,
     desc: 'Spinning multi-spoke bone wheels inside a drifting Battle Box'
   },
   {
@@ -96,6 +105,7 @@ export const ATTACK_META = [
     title: 'Blackout Cuts',
     phase: 2,
     soulMode: 'red',
+    stars: 4,
     desc: 'Sudden blackout resets shifting between Blue jumps, Blasters & color gates'
   },
   {
@@ -104,6 +114,7 @@ export const ATTACK_META = [
     title: 'Justice Corridor',
     phase: 3,
     soulMode: 'yellow',
+    stars: 4,
     desc: 'Blast through descending yellow cracked bone walls with upward shots'
   },
   {
@@ -112,6 +123,7 @@ export const ATTACK_META = [
     title: 'Gaster Hand Matrix',
     phase: 3,
     soulMode: 'red',
+    stars: 4,
     desc: 'W.D. Gaster warps the Battle Box with grid bones, wheels & slam blasters'
   },
   {
@@ -120,6 +132,7 @@ export const ATTACK_META = [
     title: 'Final Gambit',
     phase: 3,
     soulMode: 'blue',
+    stars: 4,
     desc: 'Sans unleashes his last slam & twin blasters before nodding off'
   },
   {
@@ -128,6 +141,7 @@ export const ATTACK_META = [
     title: 'Green Shield Storm',
     phase: 4,
     soulMode: 'green',
+    stars: 5,
     desc: 'High-tempo Gaster-distorted spear storm with tight directional spins'
   },
   {
@@ -136,6 +150,7 @@ export const ATTACK_META = [
     title: 'Justice Breakout',
     phase: 4,
     soulMode: 'yellow',
+    stars: 5,
     desc: 'Shatter multi-HP yellow barriers while dodging Gaster Blaster crossfire'
   },
   {
@@ -143,8 +158,18 @@ export const ATTACK_META = [
     index: 14,
     title: 'Enigmatic Dual Finale',
     phase: 4,
-    soulMode: 'red',
+    soulMode: 'mixed',
+    stars: 5,
     desc: 'Red, Green, Yellow & Blue SOUL gauntlet under Gaster & Sans command'
+  },
+  {
+    id: 'voidSingularity',
+    index: 15,
+    title: 'Void Singularity',
+    phase: 4,
+    soulMode: 'mixed',
+    stars: 5,
+    desc: 'Ultimate 4-SOUL Void singularity: Charge Shot barriers, Spear storm, Blue slam & Blaster ring'
   }
 ];
 
@@ -457,15 +482,24 @@ export class AttackRunner {
     });
   }
 
-  spawnPlayerShot(x, y) {
+  spawnPlayerShot(x, y, charged = false) {
     this.shots.push({
       x,
       y,
-      vy: -440,
+      w: charged ? 14 : 4,
+      h: charged ? 22 : 14,
+      vy: charged ? -520 : -440,
+      damage: charged ? 3 : 1,
+      charged: Boolean(charged),
+      pierce: charged ? 2 : 0,
       life: 1.4,
       age: 0
     });
-    audio.yellowShot();
+    if (charged && audio.yellowChargeShot) {
+      audio.yellowChargeShot();
+    } else {
+      audio.yellowShot();
+    }
   }
 
   update(dt, battleApi) {
@@ -594,34 +628,63 @@ export class AttackRunner {
       }
     }
 
-    // Update player Yellow SOUL shots & check collisions vs destructibles
+    // Update player Yellow SOUL shots & check collisions vs destructibles / charged vaporize
     for (let si = this.shots.length - 1; si >= 0; si--) {
       const sh = this.shots[si];
       sh.age += stepDt;
       sh.y += sh.vy * stepDt;
 
+      const halfW = (sh.w || 4) / 2 + 3;
+      const halfH = (sh.h || 14) / 2 + 1;
       let consumed = false;
       for (let di = this.destructibles.length - 1; di >= 0; di--) {
         const d = this.destructibles[di];
         const hitTarget =
-          sh.x + 5 > d.x &&
-          sh.x - 5 < d.x + d.w &&
-          sh.y + 8 > d.y &&
-          sh.y - 8 < d.y + d.h;
+          sh.x + halfW > d.x &&
+          sh.x - halfW < d.x + d.w &&
+          sh.y + halfH > d.y &&
+          sh.y - halfH < d.y + d.h;
         if (!hitTarget) continue;
 
         consumed = true;
-        d.hp -= 1;
+        d.hp -= sh.damage || 1;
         d.flashTimer = 0.08;
         if (d.hp <= 0) {
           this.destructibles.splice(di, 1);
           this.targetsBroken += 1;
           audio.targetBreak();
           this.pendingGraze += 1;
+          if (sh.pierce > 0) {
+            sh.pierce -= 1;
+            consumed = false;
+          }
         } else {
           audio.graze();
         }
-        break;
+        if (consumed) break;
+      }
+
+      // Charged Big Shot can also vaporize small non-green bones in its path
+      if (!consumed && sh.charged) {
+        for (let bi = this.bones.length - 1; bi >= 0; bi--) {
+          const b = this.bones[bi];
+          if (b.collected || b.color === 'green' || b.w * b.h > 420) continue;
+          const hitBone =
+            sh.x + halfW > b.x &&
+            sh.x - halfW < b.x + b.w &&
+            sh.y + halfH > b.y &&
+            sh.y - halfH < b.y + b.h;
+          if (!hitBone) continue;
+          this.bones.splice(bi, 1);
+          audio.targetBreak();
+          this.pendingGraze += 1;
+          if (sh.pierce > 0) {
+            sh.pierce -= 1;
+          } else {
+            consumed = true;
+            break;
+          }
+        }
       }
 
       if (consumed || sh.age >= sh.life || sh.y < -40) {
@@ -873,10 +936,17 @@ export class AttackRunner {
 
     for (const sh of this.shots) {
       ctx.save();
-      ctx.fillStyle = '#fff55a';
-      ctx.fillRect(Math.round(sh.x - 2), Math.round(sh.y - 7), 4, 14);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(Math.round(sh.x - 1), Math.round(sh.y - 5), 2, 10);
+      if (sh.charged) {
+        ctx.fillStyle = '#ffef3f';
+        ctx.fillRect(Math.round(sh.x - 7), Math.round(sh.y - 11), 14, 22);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(Math.round(sh.x - 4), Math.round(sh.y - 8), 8, 16);
+      } else {
+        ctx.fillStyle = '#fff55a';
+        ctx.fillRect(Math.round(sh.x - 2), Math.round(sh.y - 7), 4, 14);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(Math.round(sh.x - 1), Math.round(sh.y - 5), 2, 10);
+      }
       ctx.restore();
     }
 
@@ -1820,6 +1890,90 @@ const ATTACK_BUILDERS = {
     a._at(9.95, () => {
       a.spawnBlaster({ startX: CX - 56, startY: T - 170, x: CX - 56, y: T - 70, angle: 0, scale: 1.05, chargeTime: 0.70, fireTime: 0.48 });
       a.spawnBlaster({ startX: CX + 56, startY: T - 170, x: CX + 56, y: T - 70, angle: 0, scale: 1.05, chargeTime: 0.70, fireTime: 0.48 });
+    });
+  },
+
+  // 15. Phase 4 / Ultimate: Void Singularity (Yellow Charge -> Green Spears -> Blue Slam -> Red Ring)
+  voidSingularity(a, opts) {
+    a.targetBoxW = 224;
+    a.targetBoxH = 180;
+    a.initialSoulMode = 'yellow';
+    a.initialGravity = 'down';
+    a.duration = 11.4;
+    a.gasterActive = true;
+
+    const L = a.boxLeft(opts);
+    const R = a.boxRight(opts);
+    const T = a.boxTop(opts);
+    const B = a.boxBottom(opts);
+    const CX = a.boxCenterX(opts);
+    const CY = a.boxCenterY(opts);
+
+    // Act 1 (0.0 - 2.8s): Yellow SOUL Charge Shot Breakout
+    a._at(0.05, () => {
+      audio.gasterSpeak();
+      a.spawnWarning({ x: L + 18, y: T + 10, w: a.targetBoxW - 36, h: 24, duration: 0.65, color: '#ffef3f', label: 'SINGULARITY' });
+    });
+    scheduleCrackedRow(a, opts, 0.45, {
+      count: 6,
+      h: 18,
+      vy: 74,
+      hpFn: (i) => (i === 2 || i === 3 ? 2 : 1)
+    });
+    scheduleCrackedRow(a, opts, 1.55, { count: 6, h: 18, vy: 76, hp: 1 });
+
+    // Act 2 (2.85 - 5.3s): Blackout -> Green SOUL Spear Storm
+    a._at(2.85, (_, api) => {
+      a.destructibles = [];
+      a.shots = [];
+      a.blackoutFlash = 0.12;
+      audio.blackout();
+      api.setSoulMode('green');
+    });
+    scheduleSpearVolley(a, opts, [
+      { t: 3.10, dir: 'up', speed: 215, dist: 185, color: 'cyan' },
+      { t: 3.45, dir: 'right', speed: 215, dist: 185, color: 'cyan' },
+      { t: 3.80, dir: 'down', speed: 215, dist: 185, color: 'red' },
+      { t: 4.15, dir: 'left', speed: 185, dist: 185, color: 'green' },
+      { t: 4.50, dir: 'up', speed: 215, dist: 185, color: 'red' },
+      { t: 4.85, dir: 'left', speed: 215, dist: 185, color: 'cyan' }
+    ]);
+
+    // Act 3 (5.40 - 7.75s): Blackout -> Blue SOUL Down & Left Slams
+    a._at(5.40, (_, api) => {
+      a.spears = [];
+      a.blackoutFlash = 0.12;
+      audio.blackout();
+      api.slamSoul('down');
+      a.spawnWarning({ x: L + 3, y: B - 28, w: a.targetBoxW - 6, h: 25, duration: 0.62, label: '!' });
+    });
+    a._at(6.04, () => {
+      for (let bx = L + 6; bx < R - 10; bx += 14) {
+        a.spawnBone({ x: bx, y: B - 24, w: 9, h: 24, life: 0.25 });
+      }
+    });
+    a._at(6.55, (_, api) => {
+      api.slamSoul('left');
+      a.spawnWarning({ x: L + 3, y: T + 3, w: 25, h: a.targetBoxH - 6, duration: 0.62, label: '!' });
+    });
+    a._at(7.19, () => {
+      for (let by = T + 6; by < B - 10; by += 14) {
+        a.spawnBone({ x: L, y: by, w: 24, h: 9, orientation: 'horizontal', life: 0.25 });
+      }
+    });
+
+    // Act 4 (7.80 - 11.4s): Red SOUL Paired Gaster Blaster Finish
+    a._at(7.80, (_, api) => {
+      api.setSoulMode('red');
+      audio.gasterSpeak();
+    });
+    a._at(8.05, () => {
+      a.spawnBlaster({ startX: CX - 60, startY: T - 170, x: CX - 60, y: T - 70, angle: 0, scale: 1.0, chargeTime: 0.72, fireTime: 0.44 });
+      a.spawnBlaster({ startX: CX + 60, startY: T - 170, x: CX + 60, y: T - 70, angle: 0, scale: 1.0, chargeTime: 0.72, fireTime: 0.44 });
+    });
+    a._at(9.25, () => {
+      a.spawnBlaster({ startX: L - 160, startY: CY - 42, x: L - 72, y: CY - 42, angle: -Math.PI / 2, scale: 1.0, chargeTime: 0.72, fireTime: 0.44 });
+      a.spawnBlaster({ startX: R + 160, startY: CY + 42, x: R + 72, y: CY + 42, angle: Math.PI / 2, scale: 1.0, chargeTime: 0.72, fireTime: 0.44 });
     });
   }
 };

@@ -25,6 +25,7 @@ class SoundEngine {
     this.noiseBuffer = null;
 
     this.muted = false;
+    this.volume = 0.72;
     this.currentTrack = null;
     this.stepIndex = 0;
     this.nextNoteTime = 0;
@@ -43,7 +44,7 @@ class SoundEngine {
         this.bgmGain = this.ctx.createGain();
         this.sfxGain = this.ctx.createGain();
 
-        this.master.gain.value = this.muted ? 0 : 0.72;
+        this.master.gain.value = this.muted ? 0 : this.volume;
         this.bgmGain.gain.value = 0.28;
         this.sfxGain.gain.value = 0.55;
 
@@ -73,10 +74,19 @@ class SoundEngine {
     return buf;
   }
 
+  setVolume(val) {
+    const v = Number(val);
+    this.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.72;
+    if (this.master && this.ctx && !this.muted) {
+      this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.02);
+    }
+    return this.volume;
+  }
+
   setMuted(muted) {
     this.muted = Boolean(muted);
     if (this.master && this.ctx) {
-      this.master.gain.setTargetAtTime(this.muted ? 0 : 0.72, this.ctx.currentTime, 0.02);
+      this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.ctx.currentTime, 0.02);
     }
   }
 
@@ -254,6 +264,12 @@ class SoundEngine {
   yellowShot() {
     this._tone(1280, 440, 0.075, 'square', 0.14, 'sfx', 0);
     this._tone(1680, 720, 0.055, 'triangle', 0.1, 'sfx', 0.01);
+  }
+
+  yellowChargeShot() {
+    this._tone(620, 1980, 0.14, 'sawtooth', 0.2, 'sfx', 0);
+    this._tone(920, 2400, 0.11, 'square', 0.16, 'sfx', 0.015);
+    this._noise(0.08, 3200, 'bandpass', 0.14, 'sfx', 0);
   }
 
   targetBreak() {

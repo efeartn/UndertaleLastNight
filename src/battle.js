@@ -18,6 +18,18 @@ const BUTTON_Y = 428;
 
 const ACHIEVEMENTS_STORAGE_KEY = 'undertale_last_night_achievements_v1';
 const ENDLESS_BEST_STORAGE_KEY = 'undertale_last_night_endless_best_v1';
+const NOHIT_STORAGE_KEY = 'undertale_last_night_nohit_v1';
+
+export const ACHIEVEMENT_DEFS = [
+  { id: 'First Graze', title: 'First Graze', desc: 'Collect Tension (TP) by closely grazing a hazard.' },
+  { id: 'Shield Master', title: 'Shield Master', desc: 'Deflect 4+ incoming spears as the Green SOUL.' },
+  { id: 'Sharpshooter', title: 'Sharpshooter', desc: 'Shatter 3+ yellow targets cleanly with the Justice SOUL.' },
+  { id: 'Untouchable Turn', title: 'Untouchable Turn', desc: 'Survive any attack pattern without taking a single hit.' },
+  { id: 'Phase 1 Cleared', title: 'Phase 1 Cleared', desc: 'Push past Sans\'s opening barrage into Phase 2.' },
+  { id: 'Gaster Challenger', title: 'Gaster Challenger', desc: 'Witness W.D. Gaster\'s interference in the Void.' },
+  { id: 'Dawn Savior', title: 'Dawn Savior', desc: 'Reach the sunrise ending in Story or Boss Rush.' },
+  { id: 'Master of the Night', title: 'Master of the Night', desc: 'No-Hit 5 unique attacks or clear Full Boss Rush.' }
+];
 
 const FLAVOR_TEXTS = {
   1: [
@@ -59,7 +71,8 @@ const SANS_SPEECH_BY_TURN = [
   "wait... the corridor's cracking? stay sharp—this timeline isn't letting go quietly.",
   "you hear that static too? looks like the void's lending me a hand.",
   "careful now. the doctor's old blueprints don't play by normal corridor rules.",
-  "huff... alright... survive this final fracture, and morning is all yours... *yawn*..."
+  "the corridor's splitting in two... red, green, yellow, blue—show me your determination!",
+  "huff... alright... survive this final singularity, and morning is all yours... *yawn*..."
 ];
 
 export class BattleEngine {
@@ -75,8 +88,29 @@ export class BattleEngine {
     this.unlockedAchievements = this._loadAchievements();
     this.achievementQueue = [];
     this.endlessBestWave = this._loadEndlessBest();
+    this.noHitAttacks = this._loadNoHitAttacks();
 
     this.resetBattle();
+  }
+
+  _loadNoHitAttacks() {
+    if (typeof localStorage === 'undefined') return new Set();
+    try {
+      const raw = localStorage.getItem(NOHIT_STORAGE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? new Set(arr.filter((n) => Number.isInteger(n))) : new Set();
+    } catch {
+      return new Set();
+    }
+  }
+
+  _saveNoHitAttacks() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(NOHIT_STORAGE_KEY, JSON.stringify([...this.noHitAttacks]));
+    } catch {
+      // Ignore storage quota errors
+    }
   }
 
   _loadAchievements() {
@@ -140,7 +174,7 @@ export class BattleEngine {
 
   _pickNextEndlessAttackIndex(firstWave = false) {
     if (!this.endlessBag || this.endlessBag.length === 0) {
-      const pool = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+      const pool = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
       for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -168,6 +202,10 @@ export class BattleEngine {
       ? Math.max(0, Math.min(ATTACK_NAMES.length - 1, options.practiceAttackIndex))
       : null;
     this.endlessMode = Boolean(options.endless) && this.practiceAttackIndex === null;
+    this.bossRushMode = Boolean(options.bossRush) && this.practiceAttackIndex === null && !this.endlessMode;
+    this.customSpeedMult = Number.isFinite(options.customSpeedMult)
+      ? Math.max(0.5, Math.min(2.0, options.customSpeedMult))
+      : 1.0;
     this.endlessWave = 1;
     this.endlessStartPhase = options.phase || 4;
     this.endlessBag = [];
@@ -181,6 +219,9 @@ export class BattleEngine {
       this.endlessCurrentAttackIndex = this._pickNextEndlessAttackIndex(true);
       this.turnIndex = this.endlessCurrentAttackIndex;
       startPhase = this.endlessStartPhase;
+    } else if (this.bossRushMode) {
+      this.turnIndex = 0;
+      startPhase = 1;
     } else {
       this.turnIndex = turnByPhase[startPhase] ?? 0;
     }
@@ -215,10 +256,14 @@ export class BattleEngine {
     // TP & Combat Modifiers
     this.tp = 0;
     this.shieldBarrier = false;
+    this.usedTpSpellThisTurn = false;
+    this.voidInterventionPending = false;
     this.totalBlocks = 0;
     this.yellowShotsFired = 0;
     this.usedYellowThisTurn = false;
     this.sawGasterThisTurn = false;
+    this.popups = [];
+    this.soulTransitionRing = null;
 
     this.krTimer = 0;
     this.invulnTimer = 0;
@@ -267,6 +312,7 @@ export class BattleEngine {
       gravity: 'down',
       shieldDir: 'up',
       shotCooldown: 0,
+      chargeTimer: 0,
       grazeFlashTimer: 0,
       grounded: false,
       speed: 172,
@@ -344,6 +390,18 @@ export class BattleEngine {
     this.screenShake = Math.max(this.screenShake, amount);
   }
 
+  addPopup(x, y, text, color = '#ffffff') {
+    this.popups.push({
+      x,
+      y,
+      text,
+      color,
+      vy: -36,
+      timer: 0.95,
+      maxTimer: 0.95
+    });
+  }
+
   setBoxOffset(ox = 0, oy = 0) {
     this.boxOffsetX = ox;
     this.boxOffsetY = oy;
@@ -355,6 +413,22 @@ export class BattleEngine {
     const prevMode = this.soul.mode;
     const prevGrav = this.soul.gravity;
     this.soul.mode = mode;
+    if (mode !== 'yellow') {
+      this.soul.chargeTimer = 0;
+    }
+    if (mode !== prevMode) {
+      const ringColors = {
+        red: '#ff1e1e',
+        blue: '#2ce8f5',
+        green: '#4ade80',
+        yellow: '#ffef3f'
+      };
+      this.soulTransitionRing = {
+        timer: 0.45,
+        maxTimer: 0.45,
+        color: ringColors[mode] || '#ffffff'
+      };
+    }
     if (mode === 'blue') {
       this.soul.gravity = gravity;
       if (prevMode !== 'blue' || prevGrav !== gravity) {
@@ -394,7 +468,7 @@ export class BattleEngine {
   }
 
   enterClimaxSleep() {
-    if (this.endlessMode || this.practiceAttackIndex !== null) {
+    if (this.endlessMode || this.practiceAttackIndex !== null || this.bossRushMode) {
       this.runner.finished = true;
       return;
     }
@@ -404,6 +478,10 @@ export class BattleEngine {
     this.climaxSleep.choice = null;
     this.boxOffsetX = 0;
     this.boxOffsetY = 0;
+    this.box.targetW = 240;
+    this.box.w = 240;
+    this.box.targetX = 200;
+    this.box.x = 200;
     this.sans.expression = 'sleeping';
     this.sans.pose = 'pockets';
     this.sans.sleeping = true;
@@ -431,6 +509,20 @@ export class BattleEngine {
     }
     if (this.phaseBannerTimer > 0) {
       this.phaseBannerTimer = Math.max(0, this.phaseBannerTimer - dt);
+    }
+    if (this.soulTransitionRing) {
+      this.soulTransitionRing.timer -= dt;
+      if (this.soulTransitionRing.timer <= 0) {
+        this.soulTransitionRing = null;
+      }
+    }
+    for (let i = this.popups.length - 1; i >= 0; i--) {
+      const p = this.popups[i];
+      p.y += p.vy * dt;
+      p.timer -= dt;
+      if (p.timer <= 0) {
+        this.popups.splice(i, 1);
+      }
     }
     if (this.achievementQueue.length > 0) {
       this.achievementQueue[0].timer -= dt;
@@ -492,7 +584,7 @@ export class BattleEngine {
     switch (this.state) {
       case 'INTRO_TRANSITION':
         this.introTimer += dt;
-        if (this.practiceAttackIndex !== null) {
+        if (this.practiceAttackIndex !== null || this.bossRushMode) {
           if (this.introTimer >= 0.45) {
             this._startDefendAttack();
           }
@@ -585,12 +677,13 @@ export class BattleEngine {
       const cursorX = BUTTON_XS[this.menuIndex] + 16;
       if (
         this.menuBone.hitCooldown <= 0 &&
-        Math.abs(cursorX - (this.menuBone.x + 5)) < 14
+        Math.abs(cursorX - (this.menuBone.x + 8)) < 14
       ) {
         this.menuBone.hitCooldown = 0.65;
         if (!this.assistMode && this.stats.hp > 1) {
           this.stats.hp = Math.max(1, this.stats.hp - 1);
           audio.hurt();
+          this.addPopup(cursorX, BUTTON_Y - 16, '-1 HP', '#ff4c4c');
         }
       }
     }
@@ -639,16 +732,38 @@ export class BattleEngine {
     if (swung) {
       audio.slash();
       if (this.sans.sleeping) {
-        // Climax fatal hit!
-        this.sans.pose = 'damaged';
-        this.sans.expression = 'cracked';
-        this.sans.hurtShake = 18;
-        this.sans.flashAlpha = 0.9;
-        this.sans.defeated = true;
-        this.fightBar.damageText = '9999999';
-        this.fightBar.showMiss = true;
-        this.fightBar.damageTimer = 1.4;
-        audio.hit();
+        if (
+          this.phase < 4 &&
+          !this.bossRushMode &&
+          !this.endlessMode &&
+          this.practiceAttackIndex === null
+        ) {
+          // Phase 3 climax interrupted by W.D. Gaster's Void Intervention -> Phase 4!
+          this.sans.pose = 'damaged';
+          this.sans.expression = 'gaster';
+          this.sans.hurtShake = 14;
+          this.sans.flashAlpha = 0.85;
+          this.sans.sleeping = false;
+          this.sans.defeated = false;
+          this.voidInterventionPending = true;
+          this.fightBar.damageText = 'VOID BLOCKED';
+          this.fightBar.showMiss = true;
+          this.fightBar.damageTimer = 1.2;
+          this.fightBar.slashTimer = 0.95;
+          this.addPopup(this.sans.x, this.sans.y - 76, 'GASTER INTERVENED!', '#c084fc');
+          audio.gasterSpeak();
+        } else {
+          // Final Phase 4 Climax fatal hit!
+          this.sans.pose = 'damaged';
+          this.sans.expression = 'cracked';
+          this.sans.hurtShake = 18;
+          this.sans.flashAlpha = 0.9;
+          this.sans.defeated = true;
+          this.fightBar.damageText = '9999999';
+          this.fightBar.showMiss = true;
+          this.fightBar.damageTimer = 1.4;
+          audio.hit();
+        }
       } else {
         this.sans.dodgeTimer = 0.55;
         this.sans.expression = 'wink';
@@ -667,7 +782,16 @@ export class BattleEngine {
   _updateFightSlash(dt) {
     this.fightBar.slashTimer -= dt;
     if (this.fightBar.slashTimer <= 0) {
-      if (this.sans.defeated) {
+      if (this.voidInterventionPending) {
+        this.voidInterventionPending = false;
+        this.turnIndex = 12;
+        this._pendingTurnAdvance = 1;
+        this._syncPhaseFromTurnIndex();
+        this._showSansSpeech(
+          "* ...he won't let the timeline end here. welcome to the void, kid.",
+          () => this._startDefendAttack()
+        );
+      } else if (this.sans.defeated) {
         this._finishVictory('strike');
       } else {
         this._advanceTurnAfterAction(1);
@@ -742,6 +866,16 @@ export class BattleEngine {
           () => this._advanceTurnAfterAction(1)
         );
       } else if (act === 'Heal (40 TP)') {
+        if (this.usedTpSpellThisTurn) {
+          audio.menuMove();
+          this._showBoxDialogue(
+            '* You already channeled a TP spell this turn!\n* Take another action or press FIGHT to continue.',
+            () => {
+              this.state = 'ACT_MENU';
+            }
+          );
+          return;
+        }
         if (this.tp < 40) {
           audio.menuMove();
           this._showBoxDialogue(
@@ -753,16 +887,28 @@ export class BattleEngine {
           return;
         }
         this.tp -= 40;
+        this.usedTpSpellThisTurn = true;
         const beforeHp = this.stats.hp;
         this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + 22);
         this.stats.kr = Math.max(0, this.stats.kr - 10);
         const gained = this.stats.hp - beforeHp;
         audio.heal();
+        this.addPopup(330, 386, `+${gained} HP`, '#4ade80');
         this._showBoxDialogue(
-          `* You weave golden warmth from pure Tension!\n* Restored ${gained} HP and purged up to 10 KARMA!`,
-          () => this._advanceTurnAfterAction(0)
+          `* You weave golden warmth from pure Tension!\n* Restored ${gained} HP and purged KARMA! (Free action)`,
+          () => this._enterPlayerMenu()
         );
       } else if (act === 'Barrier (60 TP)') {
+        if (this.usedTpSpellThisTurn) {
+          audio.menuMove();
+          this._showBoxDialogue(
+            '* You already channeled a TP spell this turn!\n* Take another action or press FIGHT to continue.',
+            () => {
+              this.state = 'ACT_MENU';
+            }
+          );
+          return;
+        }
         if (this.tp < 60) {
           audio.menuMove();
           this._showBoxDialogue(
@@ -774,11 +920,13 @@ export class BattleEngine {
           return;
         }
         this.tp -= 60;
+        this.usedTpSpellThisTurn = true;
         this.shieldBarrier = true;
         audio.shieldBlock();
+        this.addPopup(330, 386, 'BARRIER!', '#38bdf8');
         this._showBoxDialogue(
-          '* A radiant SOUL Barrier crystallizes around you!\n* The next direct hit will be completely absorbed.',
-          () => this._advanceTurnAfterAction(0)
+          '* A radiant SOUL Barrier crystallizes around you!\n* Next direct hit absorbed! (Free action)',
+          () => this._enterPlayerMenu()
         );
       }
     }
@@ -797,7 +945,7 @@ export class BattleEngine {
     const pageItems = this.inventory.slice(pageStart, pageStart + 4);
     const count = pageItems.length;
 
-    if (input.justPressed('ArrowLeft')) {
+    if (input.justPressed('ArrowLeft') || input.justPressed('KeyA')) {
       if (this.subIndex % 2 === 0 && totalPages > 1) {
         this.itemPage = (this.itemPage - 1 + totalPages) % totalPages;
         this.subIndex = 0;
@@ -805,7 +953,7 @@ export class BattleEngine {
         this.subIndex = Math.max(0, this.subIndex - 1);
       }
       audio.menuMove();
-    } else if (input.justPressed('ArrowRight')) {
+    } else if (input.justPressed('ArrowRight') || input.justPressed('KeyD')) {
       if ((this.subIndex % 2 === 1 || this.subIndex + 1 >= count) && totalPages > 1) {
         this.itemPage = (this.itemPage + 1) % totalPages;
         this.subIndex = 0;
@@ -813,7 +961,12 @@ export class BattleEngine {
         this.subIndex += 1;
       }
       audio.menuMove();
-    } else if (input.justPressed('ArrowUp') || input.justPressed('ArrowDown')) {
+    } else if (
+      input.justPressed('ArrowUp') ||
+      input.justPressed('ArrowDown') ||
+      input.justPressed('KeyW') ||
+      input.justPressed('KeyS')
+    ) {
       const next = this.subIndex ^ 2;
       if (next < count) {
         this.subIndex = next;
@@ -937,20 +1090,18 @@ export class BattleEngine {
       this._showSansSpeech(speech, () => this._startDefendAttack());
       return;
     }
+    if (this.bossRushMode) {
+      this._pendingTurnAdvance = 1;
+      this._startDefendAttack();
+      return;
+    }
     if (this.practiceAttackIndex !== null) {
       this._pendingTurnAdvance = 0;
       this._startDefendAttack();
       return;
     }
 
-    if (progress > 1) {
-      this.turnIndex = Math.min(ATTACK_NAMES.length - 1, this.turnIndex + (progress - 1));
-      this._pendingTurnAdvance = 1;
-    } else {
-      this._pendingTurnAdvance = progress;
-    }
-    this._syncPhaseFromTurnIndex();
-
+    this._pendingTurnAdvance = progress;
     const speech = SANS_SPEECH_BY_TURN[this.turnIndex] || SANS_SPEECH_BY_TURN[0];
     this._showSansSpeech(speech, () => this._startDefendAttack());
   }
@@ -992,10 +1143,12 @@ export class BattleEngine {
   _startDefendAttack() {
     this.state = 'DEFEND_ATTACK';
     this.menuBone.active = false;
+    this.usedTpSpellThisTurn = false;
     this.turnHitsTaken = 0;
     this.usedYellowThisTurn = false;
     this.sawGasterThisTurn = false;
     this.soul.shotCooldown = 0;
+    this.soul.chargeTimer = 0;
     this.boxOffsetX = 0;
     this.boxOffsetY = 0;
     this.baseBoxCX = 320;
@@ -1007,6 +1160,7 @@ export class BattleEngine {
     } else if (this.endlessMode) {
       attackIdx = this.endlessCurrentAttackIndex;
     }
+    this.activeAttackIdx = attackIdx;
 
     const attackId = ATTACK_NAMES[attackIdx] || 'openingBadTime';
     const meta = ATTACK_META[attackIdx];
@@ -1016,10 +1170,11 @@ export class BattleEngine {
 
     const baseMult = this.tauntSpeedBoost ? 1.15 : 1.0;
     const endlessMult = this.endlessMode ? Math.min(1.42, 1.0 + (this.endlessWave - 1) * 0.03) : 1.0;
+    const speedMult = baseMult * endlessMult * (this.customSpeedMult || 1.0);
 
     this.runner.start(attackId, {
       phase: attackPhase,
-      speedMult: baseMult * endlessMult,
+      speedMult,
       spawnGreenBonus: this.spawnGreenBonus,
       boxCX,
       boxCY
@@ -1070,6 +1225,7 @@ export class BattleEngine {
     if (healed > 0) {
       this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + healed);
       audio.heal();
+      this.addPopup(this.soul.x, this.soul.y - 16, `+${healed} HP`, '#4ade80');
     }
 
     if (grazed > 0) {
@@ -1081,6 +1237,7 @@ export class BattleEngine {
     if (blocked > 0) {
       this.tp = Math.min(100, this.tp + 6 * blocked);
       this.totalBlocks += blocked;
+      this.addPopup(this.soul.x, this.soul.y - 18, '+6% TP', '#4ade80');
       if (this.totalBlocks >= 4) {
         this.unlockAchievement('Shield Master');
       }
@@ -1103,10 +1260,18 @@ export class BattleEngine {
       if (armorSpec.endTurnHeal > 0 && this.stats.hp < this.stats.maxHp) {
         this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + armorSpec.endTurnHeal);
         audio.heal();
+        this.addPopup(330, 386, `+${armorSpec.endTurnHeal} HP`, '#4ade80');
       }
 
       if (this.turnHitsTaken === 0) {
         this.unlockAchievement('Untouchable Turn');
+        if (Number.isInteger(this.activeAttackIdx)) {
+          this.noHitAttacks.add(this.activeAttackIdx);
+          this._saveNoHitAttacks();
+          if (this.noHitAttacks.size >= 5) {
+            this.unlockAchievement('Master of the Night');
+          }
+        }
       }
       if (this.usedYellowThisTurn && this.yellowShotsFired >= 3 && this.turnHitsTaken <= 1) {
         this.unlockAchievement('Sharpshooter');
@@ -1136,8 +1301,30 @@ export class BattleEngine {
         return;
       }
 
+      if (this.bossRushMode) {
+        this.turnsTaken += 1;
+        this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + 10);
+        this.stats.kr = Math.max(0, this.stats.kr - 4);
+        audio.heal();
+        if (this.turnIndex >= ATTACK_NAMES.length - 1) {
+          this.unlockAchievement('Master of the Night');
+          this._finishVictory('boss_rush');
+          return;
+        }
+        this.turnIndex += 1;
+        this._syncPhaseFromTurnIndex();
+        this.addPopup(320, 224, `RUSH ${this.turnIndex + 1}/${ATTACK_NAMES.length} (+10 HP)`, '#4ade80');
+        this._startDefendAttack();
+        return;
+      }
+
       if (this._pendingTurnAdvance > 0) {
         const prevIdx = this.turnIndex;
+        if (prevIdx >= ATTACK_NAMES.length - 1) {
+          this._pendingTurnAdvance = 0;
+          this.enterClimaxSleep();
+          return;
+        }
         this.turnIndex = Math.min(ATTACK_NAMES.length - 1, this.turnIndex + this._pendingTurnAdvance);
         this._pendingTurnAdvance = 0;
         if (prevIdx <= 4 && this.turnIndex >= 5) {
@@ -1192,15 +1379,32 @@ export class BattleEngine {
       this.soul.y += this.soul.vy * dt;
 
       if (this.soul.mode === 'yellow') {
-        const shooting =
-          input.justPressed('KeyZ') ||
-          input.justPressed('Enter') ||
-          input.isDown('KeyZ') ||
-          input.isDown('Enter');
-        if (shooting && this.soul.shotCooldown <= 0) {
-          this.runner.spawnPlayerShot(this.soul.x, this.soul.y - 10);
-          this.soul.shotCooldown = 0.18;
-          this.yellowShotsFired += 1;
+        const fireJustPressed = input.justPressed('KeyZ') || input.justPressed('Enter');
+        const fireHeld = input.isDown('KeyZ') || input.isDown('Enter');
+        if (fireJustPressed) {
+          if (this.soul.shotCooldown <= 0) {
+            this.runner.spawnPlayerShot(this.soul.x, this.soul.y - 10, false);
+            this.soul.shotCooldown = 0.16;
+            this.yellowShotsFired += 1;
+          }
+          this.soul.chargeTimer = 0.001;
+        } else if (fireHeld) {
+          this.soul.chargeTimer += dt;
+          if (this.soul.chargeTimer >= 0.68 && this.soul.shotCooldown <= 0) {
+            this.runner.spawnPlayerShot(this.soul.x, this.soul.y - 12, true);
+            this.soul.shotCooldown = 0.28;
+            this.soul.chargeTimer = 0;
+            this.yellowShotsFired += 1;
+            this.addPopup(this.soul.x, this.soul.y - 18, 'BIG SHOT!', '#ffef3f');
+          }
+        } else {
+          if (this.soul.chargeTimer >= 0.38 && this.soul.shotCooldown <= 0) {
+            this.runner.spawnPlayerShot(this.soul.x, this.soul.y - 12, true);
+            this.soul.shotCooldown = 0.26;
+            this.yellowShotsFired += 1;
+            this.addPopup(this.soul.x, this.soul.y - 18, 'BIG SHOT!', '#ffef3f');
+          }
+          this.soul.chargeTimer = 0;
         }
       }
     } else {
@@ -1346,6 +1550,7 @@ export class BattleEngine {
       this.invulnTimer = 0.45 + invulnBonus;
       this.addScreenShake(4);
       audio.shieldBlock();
+      this.addPopup(this.soul.x, this.soul.y - 18, 'BARRIER!', '#38bdf8');
       return;
     }
 
@@ -1357,6 +1562,7 @@ export class BattleEngine {
     if (this.assistMode) {
       this.stats.hp = Math.max(1, this.stats.hp - 1);
       audio.hurt();
+      this.addPopup(this.soul.x, this.soul.y - 16, '-1 HP', '#ffa024');
       return;
     }
 
@@ -1368,6 +1574,7 @@ export class BattleEngine {
     this.stats.hp -= dmg;
     this.stats.kr = Math.min(this.stats.hp, this.stats.kr + addKr);
     audio.hurt();
+    this.addPopup(this.soul.x, this.soul.y - 16, `-${dmg}`, '#ff4c4c');
 
     if (this.stats.hp <= 0) {
       this.stats.hp = 0;
@@ -1462,7 +1669,12 @@ export class BattleEngine {
     }
 
     if (go.timer >= 1.5) {
-      if (input.justPressed('ArrowLeft') || input.justPressed('ArrowRight')) {
+      if (
+        input.justPressed('ArrowLeft') ||
+        input.justPressed('ArrowRight') ||
+        input.justPressed('KeyA') ||
+        input.justPressed('KeyD')
+      ) {
         go.choiceIdx = go.choiceIdx ^ 1;
         audio.menuMove();
       } else if (input.justPressed('KeyZ') || input.justPressed('Enter')) {
@@ -1474,7 +1686,8 @@ export class BattleEngine {
               name: this.stats.name,
               maxHp: this.stats.maxHp,
               weapon: this.weaponName,
-              armor: this.armorName
+              armor: this.armorName,
+              customSpeedMult: this.customSpeedMult
             });
           } else if (this.endlessMode) {
             this.resetBattle({
@@ -1483,7 +1696,17 @@ export class BattleEngine {
               name: this.stats.name,
               maxHp: this.stats.maxHp,
               weapon: this.weaponName,
-              armor: this.armorName
+              armor: this.armorName,
+              customSpeedMult: this.customSpeedMult
+            });
+          } else if (this.bossRushMode) {
+            this.resetBattle({
+              bossRush: true,
+              name: this.stats.name,
+              maxHp: this.stats.maxHp,
+              weapon: this.weaponName,
+              armor: this.armorName,
+              customSpeedMult: this.customSpeedMult
             });
           } else {
             this.resetBattle({
@@ -1491,20 +1714,21 @@ export class BattleEngine {
               name: this.stats.name,
               maxHp: this.stats.maxHp,
               weapon: this.weaponName,
-              armor: this.armorName
+              armor: this.armorName,
+              customSpeedMult: this.customSpeedMult
             });
           }
         } else if (this.practiceAttackIndex !== null) {
           this.onOpenAttackSelect();
-        } else if (this.endlessMode) {
+        } else if (this.endlessMode || this.bossRushMode) {
           this.onReturnTitle();
         } else {
           this.onExitToOverworld();
         }
-      } else if (input.justPressed('KeyX')) {
+      } else if (input.justPressed('KeyX') || input.justPressed('Escape')) {
         if (this.practiceAttackIndex !== null) {
           this.onOpenAttackSelect();
-        } else if (this.endlessMode) {
+        } else if (this.endlessMode || this.bossRushMode) {
           this.onReturnTitle();
         } else {
           this.onExitToOverworld();
@@ -1526,25 +1750,36 @@ export class BattleEngine {
   }
 
   _updateVictory(input) {
-    if (input.justPressed('ArrowLeft') || input.justPressed('ArrowRight')) {
+    if (
+      input.justPressed('ArrowLeft') ||
+      input.justPressed('ArrowRight') ||
+      input.justPressed('KeyA') ||
+      input.justPressed('KeyD')
+    ) {
       this.victory.choiceIdx = this.victory.choiceIdx ^ 1;
       audio.menuMove();
     } else if (input.justPressed('KeyZ') || input.justPressed('Enter')) {
       audio.menuSelect();
       if (this.victory.choiceIdx === 0) {
-        this.onVictory({
-          ending: this.victory.ending,
-          rank: this.victory.rank,
-          hitsTaken: this.hitsTaken,
-          turnsTaken: this.turnsTaken
-        });
+        if (this.victory.ending === 'boss_rush') {
+          this.onReturnTitle();
+        } else {
+          this.onVictory({
+            ending: this.victory.ending,
+            rank: this.victory.rank,
+            hitsTaken: this.hitsTaken,
+            turnsTaken: this.turnsTaken
+          });
+        }
       } else {
         this.resetBattle({
+          bossRush: this.victory.ending === 'boss_rush',
           phase: 1,
           name: this.stats.name,
           maxHp: this.stats.maxHp,
           weapon: this.weaponName,
-          armor: this.armorName
+          armor: this.armorName,
+          customSpeedMult: this.customSpeedMult
         });
       }
     }
@@ -1698,12 +1933,34 @@ export class BattleEngine {
     } else if (this.state === 'DEFEND_ATTACK') {
       this.runner.renderInsideBox(ctx, this.box);
       const flash = this.invulnTimer > 0 && Math.floor(this.invulnTimer * 24) % 2 === 0;
+      if (this.soul.mode === 'yellow' && this.soul.chargeTimer >= 0.12) {
+        const chargePct = Math.min(1, this.soul.chargeTimer / 0.38);
+        ctx.save();
+        ctx.strokeStyle = chargePct >= 1 ? '#ffffff' : '#ffef3f';
+        ctx.lineWidth = chargePct >= 1 ? 2.5 : 1.5;
+        ctx.globalAlpha = 0.45 + chargePct * 0.45;
+        ctx.beginPath();
+        ctx.arc(this.soul.x, this.soul.y, 11 + chargePct * 6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       drawSoul(ctx, this.soul.x, this.soul.y, this.soul.mode, {
         gravity: this.soul.gravity,
         shieldDir: this.soul.shieldDir,
         flash,
         grazeFlash: this.soul.grazeFlashTimer > 0
       });
+      if (this.soulTransitionRing) {
+        const prog = 1 - this.soulTransitionRing.timer / this.soulTransitionRing.maxTimer;
+        ctx.save();
+        ctx.strokeStyle = this.soulTransitionRing.color;
+        ctx.globalAlpha = Math.max(0, 1 - prog);
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(this.soul.x, this.soul.y, 10 + prog * 28, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       if (this.shieldBarrier) {
         ctx.save();
         ctx.strokeStyle = '#38bdf8';
@@ -1740,16 +1997,32 @@ export class BattleEngine {
       drawBattleButton(ctx, BUTTON_XS[idx], BUTTON_Y, lbl, selected, this.soul.mode);
     });
 
-    // Subtle Menu Bone Hazard sliding across bottom buttons in Phase 2+
+    // Menu Bone Warning Rail & Sliding Bone above buttons (Phase 2+, never obscures button labels)
     if (this.menuBone.active && this.state === 'PLAYER_MENU') {
+      const railY = BUTTON_Y - 10;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 68, 68, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(32, railY + 4);
+      ctx.lineTo(608, railY + 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const bx = Math.round(this.menuBone.x);
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(Math.round(this.menuBone.x), BUTTON_Y + 6, 8, 30);
-      ctx.fillRect(Math.round(this.menuBone.x) - 2, BUTTON_Y + 6, 12, 5);
-      ctx.fillRect(Math.round(this.menuBone.x) - 2, BUTTON_Y + 31, 12, 5);
+      ctx.fillRect(bx, railY + 1, 14, 6);
+      ctx.fillRect(bx - 2, railY, 4, 8);
+      ctx.fillRect(bx + 12, railY, 4, 8);
+      ctx.fillStyle = '#ff4444';
+      ctx.fillRect(bx + 2, railY + 3, 10, 2);
+      ctx.restore();
     }
 
-    // Mode Badge (Endless Wave / Practice Attack)
+    // Mode Badge (Endless Wave / Boss Rush / Practice Attack) & Story Boss Stamina HUD
     this._renderModeHudBadge(ctx);
+    this._renderBossHud(ctx);
+    this._renderPopups(ctx);
 
     // Phase Banner Toast
     if (this.phaseBannerTimer > 0) {
@@ -1809,7 +2082,7 @@ export class BattleEngine {
   }
 
   _renderModeHudBadge(ctx) {
-    if (!this.endlessMode && this.practiceAttackIndex === null) return;
+    if (!this.endlessMode && !this.bossRushMode && this.practiceAttackIndex === null) return;
 
     ctx.save();
     if (this.endlessMode) {
@@ -1821,6 +2094,15 @@ export class BattleEngine {
       ctx.fillStyle = '#fed7aa';
       ctx.font = '10px "Press Start 2P", monospace';
       ctx.fillText(`WAVE ${this.endlessWave}  BEST:${this.endlessBestWave}`, 22, 32);
+    } else if (this.bossRushMode) {
+      ctx.fillStyle = 'rgba(24, 10, 12, 0.88)';
+      ctx.fillRect(12, 12, 238, 30);
+      ctx.strokeStyle = '#f97316';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(12, 12, 238, 30);
+      ctx.fillStyle = '#ffedd5';
+      ctx.font = '9px "Press Start 2P", monospace';
+      ctx.fillText(`BOSS RUSH  ${this.turnIndex + 1}/${ATTACK_NAMES.length}`, 22, 31);
     } else if (this.practiceAttackIndex !== null) {
       const meta = ATTACK_META[this.practiceAttackIndex];
       const title = meta ? meta.title : `Attack ${this.practiceAttackIndex + 1}`;
@@ -1833,6 +2115,54 @@ export class BattleEngine {
       ctx.font = '9px "Press Start 2P", monospace';
       const label = `#${this.practiceAttackIndex + 1} ${title}`.slice(0, 28);
       ctx.fillText(label, 20, 31);
+    }
+    ctx.restore();
+  }
+
+  _renderBossHud(ctx) {
+    if (this.endlessMode || this.practiceAttackIndex !== null || this.bossRushMode) return;
+    if (this.phaseBannerTimer > 0) return;
+
+    const total = ATTACK_NAMES.length;
+    const staminaPct = Math.max(0, Math.min(1, 1 - this.turnIndex / total));
+    const phaseAccent = this.phase >= 4 ? '#c084fc' : this.phase === 3 ? '#ff4c4c' : this.phase === 2 ? '#2ce8f5' : '#e2e8f0';
+
+    ctx.save();
+    const x = 14;
+    const y = 12;
+    const w = 176;
+    const h = 30;
+    ctx.fillStyle = 'rgba(8, 8, 16, 0.84)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = phaseAccent;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.fillStyle = phaseAccent;
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText(`PHASE ${this.phase}/4   ${this.turnIndex + 1}/${total}`, x + 8, y + 13);
+
+    // Boss Stamina Bar
+    ctx.fillStyle = '#1f1f2e';
+    ctx.fillRect(x + 8, y + 19, w - 16, 6);
+    ctx.fillStyle = phaseAccent;
+    ctx.fillRect(x + 8, y + 19, Math.round((w - 16) * staminaPct), 6);
+    ctx.restore();
+  }
+
+  _renderPopups(ctx) {
+    if (this.popups.length === 0) return;
+    ctx.save();
+    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    for (const p of this.popups) {
+      const alpha = Math.max(0, Math.min(1, p.timer / (p.maxTimer * 0.55)));
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(p.text, Math.round(p.x), Math.round(p.y));
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, Math.round(p.x), Math.round(p.y));
     }
     ctx.restore();
   }
@@ -2076,15 +2406,16 @@ export class BattleEngine {
   }
 
   _renderClimaxSleepPrompt(ctx) {
+    const cx = this.box.x + this.box.w / 2;
     ctx.save();
     ctx.fillStyle = '#ffef3f';
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '9px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('SANS FELL ASLEEP!', this.box.x + this.box.w / 2, this.box.y + 24);
+    ctx.fillText('SANS IS EXHAUSTED!', cx, this.box.y + 24);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('Push Box LEFT -> FIGHT', this.box.x + this.box.w / 2, this.box.y + 128);
+    ctx.fillText('<- PUSH LEFT: FIGHT', cx, this.box.y + 124);
     ctx.fillStyle = '#4ade80';
-    ctx.fillText('Push Box RIGHT -> MERCY', this.box.x + this.box.w / 2, this.box.y + 148);
+    ctx.fillText('PUSH RIGHT: MERCY ->', cx, this.box.y + 144);
     ctx.restore();
   }
 
@@ -2178,10 +2509,12 @@ export class BattleEngine {
           ? `Retry Attack #${this.practiceAttackIndex + 1}`
           : this.endlessMode
             ? 'Retry Endless'
-            : `Retry Phase ${this.phase}`;
+            : this.bossRushMode
+              ? 'Retry Boss Rush'
+              : `Retry Phase ${this.phase}`;
         const exitLabel = this.practiceAttackIndex !== null
           ? 'Attack Select'
-          : this.endlessMode
+          : this.endlessMode || this.bossRushMode
             ? 'Return to Title'
             : 'Return to Antechamber';
         const opts = [
@@ -2214,11 +2547,13 @@ export class BattleEngine {
     ctx.lineWidth = 4;
     ctx.strokeRect(48, 48, 544, 384);
 
+    const isBossRush = this.victory.ending === 'boss_rush';
+    const isTruce = this.victory.ending === 'truce';
     ctx.textAlign = 'center';
-    ctx.fillStyle = this.victory.ending === 'truce' ? '#ffd770' : '#ff4c4c';
+    ctx.fillStyle = isBossRush ? '#f97316' : isTruce ? '#ffd770' : '#ff4c4c';
     ctx.font = '22px "Press Start 2P", monospace';
     ctx.fillText(
-      this.victory.ending === 'truce' ? 'DAWN TRUCE REACHED' : 'LAST NIGHT CLEARED',
+      isBossRush ? 'BOSS RUSH CLEARED!' : isTruce ? 'DAWN TRUCE REACHED' : 'LAST NIGHT CLEARED',
       320,
       110
     );
@@ -2226,9 +2561,11 @@ export class BattleEngine {
     ctx.fillStyle = '#ffffff';
     ctx.font = '13px "Press Start 2P", monospace';
     ctx.fillText(
-      this.victory.ending === 'truce'
-        ? 'You lowered your blade and chose mercy.'
-        : 'The final judgment ends in silence.',
+      isBossRush
+        ? `All ${ATTACK_NAMES.length} signature patterns endured.`
+        : isTruce
+          ? 'You lowered your blade and chose mercy.'
+          : 'The final judgment ends in silence.',
       320,
       154
     );
@@ -2242,8 +2579,8 @@ export class BattleEngine {
     ctx.fillText(`RANK: ${this.victory.rank}`, 320, 304);
 
     const opts = [
-      { label: 'Step to Dawn Balcony', x: 190, soulX: 64 },
-      { label: 'Fight Again', x: 456, soulX: 382 }
+      { label: isBossRush ? 'Return to Title' : 'Step to Dawn Balcony', x: 190, soulX: 64 },
+      { label: isBossRush ? 'Rush Again' : 'Fight Again', x: 456, soulX: 382 }
     ];
     opts.forEach((opt, i) => {
       const oy = 376;
@@ -2309,5 +2646,137 @@ export class BattleEngine {
       ctx.fillText(opt.label, 328, opt.y);
     });
     ctx.restore();
+  }
+
+  handlePointerMove(x, y) {
+    if (this.state === 'PLAYER_MENU') {
+      if (y >= BUTTON_Y && y <= BUTTON_Y + 42) {
+        for (let i = 0; i < BUTTON_XS.length; i++) {
+          if (x >= BUTTON_XS[i] && x <= BUTTON_XS[i] + 110) {
+            if (this.menuIndex !== i) {
+              this.menuIndex = i;
+              audio.menuMove();
+            }
+            return;
+          }
+        }
+      }
+    } else if (this.state === 'ACT_MENU') {
+      const col = x >= this.box.x + 280 ? 1 : 0;
+      const row = Math.floor((y - (this.box.y + 12)) / 32);
+      if (row >= 0 && row < 3) {
+        const idx = row * 2 + col;
+        if (idx >= 0 && idx < 6 && this.subIndex !== idx) {
+          this.subIndex = idx;
+          audio.menuMove();
+        }
+      }
+    } else if (this.state === 'ITEM_MENU') {
+      const pageItems = this.inventory.slice(this.itemPage * 4, this.itemPage * 4 + 4);
+      const col = x >= this.box.x + 295 ? 1 : 0;
+      const row = y >= this.box.y + 62 ? 1 : 0;
+      const idx = row * 2 + col;
+      if (y >= this.box.y + 18 && y <= this.box.y + 112 && idx < pageItems.length && this.subIndex !== idx) {
+        this.subIndex = idx;
+        audio.menuMove();
+      }
+    } else if (this.state === 'GAME_OVER' && this.gameOver.timer >= 1.5) {
+      if (y >= 330 && y <= 385) {
+        const nextIdx = x >= 320 ? 1 : 0;
+        if (this.gameOver.choiceIdx !== nextIdx) {
+          this.gameOver.choiceIdx = nextIdx;
+          audio.menuMove();
+        }
+      }
+    } else if (this.state === 'VICTORY_SUMMARY') {
+      if (y >= 348 && y <= 404) {
+        const nextIdx = x >= 320 ? 1 : 0;
+        if (this.victory.choiceIdx !== nextIdx) {
+          this.victory.choiceIdx = nextIdx;
+          audio.menuMove();
+        }
+      }
+    } else if (this.state === 'PRACTICE_CLEAR') {
+      const ys = [286, 326, 366];
+      for (let i = 0; i < ys.length; i++) {
+        if (Math.abs(y - ys[i]) <= 18) {
+          if (this.practiceClear.choiceIdx !== i) {
+            this.practiceClear.choiceIdx = i;
+            audio.menuMove();
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  handlePointerDown(x, y, input) {
+    const fireKey = (code) => {
+      if (input.tap) input.tap(code);
+      else input.triggerPress(code);
+    };
+    this.handlePointerMove(x, y);
+    if (this.state === 'PLAYER_MENU') {
+      if (y >= BUTTON_Y && y <= BUTTON_Y + 42) {
+        for (let i = 0; i < BUTTON_XS.length; i++) {
+          if (x >= BUTTON_XS[i] && x <= BUTTON_XS[i] + 110) {
+            this.menuIndex = i;
+            fireKey('KeyZ');
+            return;
+          }
+        }
+      }
+    } else if (this.state === 'FIGHT_AIM') {
+      if (y >= this.box.y && y <= this.box.y + this.box.h) {
+        fireKey('KeyZ');
+      }
+    } else if (this.state === 'ACT_MENU') {
+      if (y >= this.box.y + 114 && y <= this.box.y + 148 && x < this.box.x + 240) {
+        fireKey('KeyX');
+        return;
+      }
+      if (y >= this.box.y + 12 && y <= this.box.y + 110) {
+        fireKey('KeyZ');
+      }
+    } else if (this.state === 'ITEM_MENU') {
+      if (y >= this.box.y + 114 && y <= this.box.y + 148) {
+        if (x >= this.box.x + 390) {
+          const totalPages = Math.max(1, Math.ceil(this.inventory.length / 4));
+          if (totalPages > 1) {
+            this.itemPage = (this.itemPage + 1) % totalPages;
+            this.subIndex = 0;
+            audio.menuMove();
+          }
+        } else {
+          fireKey('KeyX');
+        }
+        return;
+      }
+      if (y >= this.box.y + 18 && y <= this.box.y + 112 && this.inventory.length > 0) {
+        fireKey('KeyZ');
+      }
+    } else if (this.state === 'MERCY_MENU') {
+      if (y >= this.box.y && y <= this.box.y + this.box.h) {
+        fireKey('KeyZ');
+      }
+    } else if (this.state === 'DIALOGUE_TEXT') {
+      if (this.boxDialogue.charIdx < this.boxDialogue.text.length) {
+        this.boxDialogue.charIdx = this.boxDialogue.text.length;
+      } else {
+        fireKey('KeyZ');
+      }
+    } else if (this.state === 'SANS_SPEECH') {
+      if (this.sansBubble.charIdx < this.sansBubble.text.length) {
+        this.sansBubble.charIdx = this.sansBubble.text.length;
+      } else {
+        fireKey('KeyZ');
+      }
+    } else if (this.state === 'GAME_OVER' && this.gameOver.timer >= 1.5 && y >= 330 && y <= 385) {
+      fireKey('KeyZ');
+    } else if (this.state === 'VICTORY_SUMMARY' && y >= 348 && y <= 404) {
+      fireKey('KeyZ');
+    } else if (this.state === 'PRACTICE_CLEAR' && y >= 264 && y <= 388) {
+      fireKey('KeyZ');
+    }
   }
 }
