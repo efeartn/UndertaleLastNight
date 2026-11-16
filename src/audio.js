@@ -305,6 +305,19 @@ class SoundEngine {
     });
   }
 
+  fourthWallGlitch() {
+    const cuts = [
+      [1920, 410, 0.04, 0],
+      [260, 1540, 0.04, 0.045],
+      [1180, 180, 0.05, 0.09],
+      [440, 2240, 0.05, 0.145]
+    ];
+    for (const [f0, f1, dur, d] of cuts) {
+      this._tone(f0, f1, dur, 'sawtooth', 0.16, 'sfx', d);
+    }
+    this._noise(0.18, 2600, 'bandpass', 0.14, 'sfx', 0.01);
+  }
+
   // --- Procedural BGM Tracks ---
 
   playBGM(trackName) {
@@ -346,17 +359,31 @@ class SoundEngine {
 
     const lead = track.lead[idx];
     if (lead) {
-      this._scheduleOsc(freq(lead), stepDur * (track.leadHold || 0.9), track.leadWave || 'square', 0.17, t);
+      const f = freq(lead);
+      const dur = stepDur * (track.leadHold || 0.9);
+      this._scheduleOsc(f, dur, track.leadWave || 'sawtooth', 0.15, t);
+      if (track.detuneLead) {
+        this._scheduleOsc(f * 1.003, dur * 0.95, 'square', 0.09, t);
+      }
     }
 
-    const counter = track.counter && track.counter[idx];
+    const counter = track.counter && track.counter[idx % track.counter.length];
     if (counter) {
-      this._scheduleOsc(freq(counter), stepDur * 0.9, 'triangle', 0.11, t);
+      this._scheduleOsc(freq(counter), stepDur * 0.92, 'triangle', 0.11, t);
     }
 
-    const bass = track.bass && track.bass[idx];
+    const arp = track.arp && track.arp[idx % track.arp.length];
+    if (arp) {
+      this._scheduleOsc(freq(arp), stepDur * 0.65, 'square', 0.085, t);
+    }
+
+    const bass = track.bass && track.bass[idx % track.bass.length];
     if (bass) {
-      this._scheduleOsc(freq(bass), stepDur * 1.15, track.bassWave || 'sawtooth', 0.16, t);
+      const bf = freq(bass);
+      this._scheduleOsc(bf, stepDur * 1.15, track.bassWave || 'sawtooth', 0.16, t);
+      if (track.subBass) {
+        this._scheduleOsc(bf * 0.5, stepDur * 1.25, 'triangle', 0.12, t);
+      }
     }
 
     if (track.drums) {
@@ -367,6 +394,10 @@ class SoundEngine {
         this._scheduleSnare(t);
       } else if (d === 'H') {
         this._scheduleHat(t);
+      } else if (d === 'O') {
+        this._scheduleOpenHat(t);
+      } else if (d === 'C') {
+        this._scheduleCrash(t);
       }
     }
   }
@@ -434,105 +465,215 @@ class SoundEngine {
     src.start(t);
     src.stop(t + 0.04);
   }
+
+  _scheduleOpenHat(t) {
+    if (!this.ctx || !this.noiseBuffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(4200, t);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.11, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(this.bgmGain);
+    src.start(t);
+    src.stop(t + 0.12);
+  }
+
+  _scheduleCrash(t) {
+    if (!this.ctx || !this.noiseBuffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(3000, t);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.22, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(this.bgmGain);
+    src.start(t);
+    src.stop(t + 0.30);
+  }
 }
 
-// --- Track Definitions ---
+// --- Original High-Intensity Boss Track Definitions (4x 128-Step Anthems) ---
 
-function buildMegalovaniaBar(root) {
-  // Iconic 16-step riff anchored on `root`
-  return [root, root, 'D5', null, 'A4', null, null, 'G#4', null, 'G4', null, 'F4', null, 'D4', 'F4', 'G4'];
+function gallopBass(rootLo, rootHi) {
+  return [
+    rootLo, rootLo, rootHi, rootLo, rootLo, rootHi, rootLo, rootHi,
+    rootLo, rootLo, rootHi, rootLo, rootHi, rootLo, rootHi, rootLo
+  ];
 }
 
+function arp16(a, b, c, d) {
+  return [a, b, c, d, a, b, c, d, a, b, c, d, a, c, d, c];
+}
+
+// Phase 1: "JUDGMENT OVERDRIVE" (138 BPM D minor / F# phrygian energy)
 const P1_LEAD = [
-  ...buildMegalovaniaBar('D4'),
-  ...buildMegalovaniaBar('C4'),
-  ...buildMegalovaniaBar('B3'),
-  ...buildMegalovaniaBar('A#3'),
-  // B-section intense climax phrase (64 steps)
-  'F4', null, 'F4', 'F4', null, 'F4', null, 'D4', null, 'D4', null, null, null, null, null, null,
-  'F4', null, 'F4', 'F4', null, 'G4', null, 'G#4', null, 'G4', 'F4', 'D4', 'F4', 'G4', null, null,
-  'F4', null, 'F4', 'F4', null, 'G4', null, 'G#4', null, 'A4', null, 'C5', null, 'A4', null, null,
-  'D5', null, 'D5', null, 'D5', 'A4', 'D5', 'C5', null, null, 'A4', null, 'G4', 'F4', 'D4', null
+  'D5', null, 'F5', 'E5', 'D5', null, 'A4', 'C5', 'D5', null, 'G5', 'F5', 'E5', null, 'C5', 'E5',
+  'F5', null, 'G5', 'A5', 'G5', 'F5', 'E5', 'D5', 'C5', null, 'A4', 'C5', 'D5', null, 'E5', null,
+  'D5', null, 'F5', 'A5', 'A#5', null, 'A5', 'G5', 'F5', 'E5', 'D5', 'F5', 'E5', null, 'C5', null,
+  'A#4', 'C5', 'D5', 'E5', 'F5', 'G5', 'A5', null, 'G#5', null, 'G5', 'F5', 'E5', null, 'A4', null,
+  // B-section drop
+  'A5', null, 'A5', 'G5', 'F5', null, 'D5', 'F5', 'G5', null, 'G5', 'F5', 'E5', null, 'C5', 'E5',
+  'F5', 'G5', 'A5', null, 'A#5', 'A5', 'G5', 'F5', 'E5', 'D5', 'C#5', 'E5', 'A5', null, null, null,
+  'D6', null, 'C6', 'A#5', 'A5', null, 'G5', 'F5', 'G5', 'A5', 'A#5', 'C6', 'A5', null, 'F5', null,
+  'G5', 'F5', 'E5', 'D5', 'C#5', 'D5', 'E5', 'G5', 'A5', null, 'E5', null, 'D5', null, 'A4', null
+];
+
+const P1_ARP = [
+  ...arp16('D4', 'F4', 'A4', 'D5'),
+  ...arp16('C4', 'E4', 'G4', 'C5'),
+  ...arp16('A#3', 'D4', 'F4', 'A#4'),
+  ...arp16('A3', 'C#4', 'E4', 'A4'),
+  ...arp16('F4', 'A4', 'C5', 'F5'),
+  ...arp16('G4', 'A#4', 'D5', 'G5'),
+  ...arp16('A#3', 'D4', 'F4', 'A4'),
+  ...arp16('A3', 'C#4', 'E4', 'A4')
 ];
 
 const P1_BASS = [
-  'D2', null, 'D3', null, 'D2', null, 'D3', null, 'D2', null, 'D3', null, 'D2', null, 'D3', null,
-  'C2', null, 'C3', null, 'C2', null, 'C3', null, 'C2', null, 'C3', null, 'C2', null, 'C3', null,
-  'B1', null, 'B2', null, 'B1', null, 'B2', null, 'B1', null, 'B2', null, 'B1', null, 'B2', null,
-  'A#1', null, 'A#2', null, 'A#1', null, 'A#2', null, 'A#1', null, 'C2', null, 'A#1', null, 'C2', null,
-  'A#1', null, 'A#2', null, 'A#1', null, 'A#2', null, 'D2', null, 'D3', null, 'D2', null, 'D3', null,
-  'A#1', null, 'A#2', null, 'C2', null, 'C3', null, 'D2', null, 'D3', null, 'D2', null, 'D3', null,
-  'G2', null, 'G3', null, 'G2', null, 'G3', null, 'A2', null, 'A3', null, 'A2', null, 'A3', null,
-  'A#2', null, 'C3', null, 'D3', null, 'A2', null, 'D2', null, null, null, 'A2', null, null, null
+  ...gallopBass('D2', 'D3'),
+  ...gallopBass('C2', 'C3'),
+  ...gallopBass('A#1', 'A#2'),
+  ...gallopBass('A1', 'A2'),
+  ...gallopBass('F2', 'F3'),
+  ...gallopBass('G2', 'G3'),
+  ...gallopBass('A#1', 'A#2'),
+  ...gallopBass('A1', 'A2')
 ];
 
+// Phase 2: "CRIMSON VELOCITY" (150 BPM syncopated bullet-hell surge)
 const P2_LEAD = [
-  'D5', null, 'D5', 'F5', null, 'D5', 'C5', null, 'A#4', null, 'A4', 'G4', 'F4', 'G4', 'A4', 'C5',
-  'D5', null, 'A4', null, 'G#4', null, 'G4', 'F4', 'D4', 'F4', 'G4', 'A4', 'C5', null, 'E5', null,
-  'F5', null, 'F5', 'E5', null, 'D5', 'C5', null, 'A#4', 'C5', 'D5', null, 'A4', null, 'G4', null,
-  'A4', 'C5', 'D5', 'F5', 'E5', 'D5', 'C5', 'A4', 'G#4', 'G4', 'F4', 'D4', 'F4', 'G4', 'A4', null
+  'E5', 'E5', null, 'G5', 'F#5', null, 'D5', 'E5', 'G5', null, 'A5', 'G5', 'F#5', 'E5', 'D5', 'B4',
+  'C5', null, 'D5', 'E5', 'G5', null, 'F#5', 'E5', 'D5', 'C5', 'B4', 'C5', 'D5', null, 'F#5', null,
+  'E5', 'G5', 'B5', null, 'A5', 'G5', 'F#5', 'E5', 'G5', null, 'F#5', 'D5', 'E5', null, 'B4', null,
+  'C5', 'E5', 'G5', 'B5', 'A5', null, 'G5', 'F#5', 'E5', 'D#5', 'E5', 'F#5', 'G5', null, 'B5', null,
+  // Bridge overdrive
+  'B5', null, 'B5', 'A5', 'G5', 'F#5', 'E5', null, 'A5', null, 'A5', 'G5', 'F#5', 'E5', 'D5', null,
+  'G5', 'A5', 'B5', 'C6', 'B5', 'A5', 'G5', 'F#5', 'E5', 'F#5', 'G5', 'E5', 'D#5', null, 'B4', null,
+  'E5', 'F#5', 'G5', 'A5', 'B5', null, 'E6', null, 'D6', 'C6', 'B5', 'A5', 'G5', 'F#5', 'E5', 'D5',
+  'C5', 'B4', 'A4', 'B4', 'C5', 'D5', 'E5', 'G5', 'F#5', null, 'D#5', null, 'E5', null, null, null
 ];
 
 const P2_COUNTER = [
-  'D4', 'F4', 'A4', 'D5', 'A4', 'F4', 'D4', 'F4', 'A#3', 'D4', 'F4', 'A#4', 'F4', 'D4', 'A#3', 'D4',
-  'C4', 'E4', 'G4', 'C5', 'G4', 'E4', 'C4', 'E4', 'A3', 'C#4', 'E4', 'A4', 'E4', 'C#4', 'A3', 'C#4',
-  'D4', 'F4', 'A4', 'D5', 'A4', 'F4', 'D4', 'F4', 'G3', 'A#3', 'D4', 'G4', 'D4', 'A#3', 'G3', 'A#3',
-  'A3', 'D4', 'F4', 'A4', 'C4', 'E4', 'G4', 'C5', 'A3', 'C#4', 'E4', 'A4', 'A3', null, 'A3', null
+  'B3', null, 'E4', null, 'G4', null, 'B4', null, 'D4', null, 'F#4', null, 'A4', null, 'D5', null,
+  'C4', null, 'E4', null, 'G4', null, 'C5', null, 'B3', null, 'D#4', null, 'F#4', null, 'B4', null,
+  'E4', null, 'G4', null, 'B4', null, 'E5', null, 'D4', null, 'G4', null, 'B4', null, 'D5', null,
+  'C4', null, 'E4', null, 'A4', null, 'C5', null, 'B3', null, 'F#4', null, 'B4', null, 'E5', null,
+  'E4', null, 'G4', null, 'B4', null, 'E5', null, 'D4', null, 'F#4', null, 'A4', null, 'D5', null,
+  'C4', null, 'E4', null, 'G4', null, 'C5', null, 'B3', null, 'D#4', null, 'F#4', null, 'B4', null,
+  'E4', null, 'B4', null, 'G4', null, 'E5', null, 'D4', null, 'A4', null, 'C5', null, 'D5', null,
+  'C4', null, 'E4', null, 'A4', null, 'C5', null, 'B3', null, 'F#4', null, 'E4', null, null, null
+];
+
+const P2_ARP = [
+  ...arp16('E4', 'G4', 'B4', 'E5'),
+  ...arp16('D4', 'F#4', 'A4', 'D5'),
+  ...arp16('C4', 'E4', 'G4', 'C5'),
+  ...arp16('B3', 'D#4', 'F#4', 'B4'),
+  ...arp16('E4', 'B4', 'G4', 'E5'),
+  ...arp16('D4', 'A4', 'F#4', 'D5'),
+  ...arp16('C4', 'G4', 'E4', 'C5'),
+  ...arp16('B3', 'F#4', 'D#4', 'B4')
 ];
 
 const P2_BASS = [
-  'D2', 'D2', 'D3', 'D2', 'D2', 'D3', 'D2', 'D3', 'A#1', 'A#1', 'A#2', 'A#1', 'A#1', 'A#2', 'A#1', 'A#2',
-  'C2', 'C2', 'C3', 'C2', 'C2', 'C3', 'C2', 'C3', 'A1', 'A1', 'A2', 'A1', 'A1', 'A2', 'A1', 'A2',
-  'D2', 'D2', 'D3', 'D2', 'D2', 'D3', 'D2', 'D3', 'G1', 'G1', 'G2', 'G1', 'G1', 'G2', 'G1', 'G2',
-  'A#1', 'A#2', 'C2', 'C3', 'D2', 'D3', 'A1', 'A2', 'D2', null, 'A2', null, 'D2', null, 'C2', null
+  ...gallopBass('E2', 'E3'),
+  ...gallopBass('D2', 'D3'),
+  ...gallopBass('C2', 'C3'),
+  ...gallopBass('B1', 'B2'),
+  ...gallopBass('E2', 'E3'),
+  ...gallopBass('D2', 'D3'),
+  ...gallopBass('C2', 'C3'),
+  ...gallopBass('B1', 'B2')
 ];
 
+// Phase 3: "SHATTERED DAWN" (158 BPM high-stakes C# minor climax)
 const P3_LEAD = [
-  'D5', null, 'A4', null, 'F5', null, 'E5', null, 'D5', 'C5', 'A#4', 'A4', 'G4', null, 'A4', null,
-  'D5', null, 'F5', null, 'G5', null, 'F5', null, 'E5', 'D5', 'C#5', 'A4', 'E5', null, 'A5', null,
-  'A#5', null, 'A5', null, 'G5', null, 'F5', null, 'E5', null, 'D5', null, 'C5', null, 'A4', null,
-  'F5', null, 'E5', null, 'D5', null, 'C#5', null, 'D5', null, 'A4', null, 'D5', null, null, null
+  'C#5', 'C#5', 'G#5', null, 'F#5', null, 'E5', 'D#5', 'E5', 'F#5', 'G#5', null, 'A5', null, 'G#5', 'F#5',
+  'E5', null, 'D#5', 'C#5', 'B4', 'C#5', 'D#5', 'E5', 'F#5', null, 'G#5', null, 'D#5', null, 'G#4', null,
+  'C#5', 'E5', 'G#5', 'C#6', 'B5', null, 'A5', 'G#5', 'A5', null, 'G#5', 'F#5', 'E5', null, 'C#5', null,
+  'D#5', 'F#5', 'A5', 'B5', 'C#6', null, 'B5', 'A5', 'G#5', null, 'F#5', null, 'E5', null, 'D#5', null,
+  // Urgent rising finale
+  'A5', 'A5', 'G#5', 'F#5', 'E5', null, 'C#5', 'E5', 'F#5', 'G#5', 'A5', null, 'B5', null, 'G#5', null,
+  'C#6', null, 'B5', 'A5', 'G#5', 'F#5', 'E5', 'D#5', 'E5', 'F#5', 'G#5', 'A5', 'G#5', null, 'D#5', null,
+  'E5', 'F#5', 'G#5', 'A5', 'B5', 'C#6', 'D#6', null, 'C#6', 'B5', 'A5', 'G#5', 'F#5', 'E5', 'D#5', 'C#5',
+  'A5', null, 'G#5', null, 'F#5', null, 'D#5', null, 'C#5', null, 'G#4', null, 'C#5', null, null, null
+];
+
+const P3_COUNTER = [
+  'C#4', 'E4', 'G#4', 'C#5', 'G#4', 'E4', 'C#4', 'E4', 'B3', 'D#4', 'F#4', 'B4', 'F#4', 'D#4', 'B3', 'D#4',
+  'A3', 'C#4', 'E4', 'A4', 'E4', 'C#4', 'A3', 'C#4', 'G#3', 'B3', 'D#4', 'G#4', 'D#4', 'B3', 'G#3', 'B3',
+  'C#4', 'E4', 'G#4', 'C#5', 'G#4', 'E4', 'C#4', 'E4', 'A3', 'C#4', 'E4', 'A4', 'E4', 'C#4', 'A3', 'C#4',
+  'F#3', 'A3', 'C#4', 'F#4', 'G#3', 'C4', 'D#4', 'G#4', 'G#3', 'C4', 'D#4', 'G#4', 'D#4', 'C4', 'G#3', 'C4',
+  'A3', 'C#4', 'E4', 'A4', 'E4', 'C#4', 'A3', 'C#4', 'B3', 'D#4', 'F#4', 'B4', 'F#4', 'D#4', 'B3', 'D#4',
+  'C#4', 'E4', 'G#4', 'C#5', 'G#4', 'E4', 'C#4', 'E4', 'G#3', 'B3', 'D#4', 'G#4', 'D#4', 'B3', 'G#3', 'B3',
+  'A3', 'E4', 'A4', 'C#5', 'B3', 'F#4', 'B4', 'D#5', 'C#4', 'G#4', 'C#5', 'E5', 'G#4', 'E4', 'C#4', 'E4',
+  'F#3', 'A3', 'C#4', 'F#4', 'G#3', 'C4', 'D#4', 'G#4', 'C#4', null, 'G#3', null, 'C#4', null, null, null
 ];
 
 const P3_BASS = [
-  'D2', 'D3', 'D2', 'D3', 'D2', 'D3', 'D2', 'D3', 'C2', 'C3', 'C2', 'C3', 'A#1', 'A#2', 'A1', 'A2',
-  'D2', 'D3', 'D2', 'D3', 'G2', 'G3', 'G2', 'G3', 'A2', 'A3', 'A2', 'A3', 'A1', 'A2', 'A1', 'A2',
-  'A#1', 'A#2', 'A#1', 'A#2', 'C2', 'C3', 'C2', 'C3', 'F2', 'F3', 'D2', 'D3', 'C2', 'C3', 'A1', 'A2',
-  'G1', 'G2', 'A#1', 'A#2', 'A1', 'A2', 'A1', 'A2', 'D2', null, 'A2', null, 'D2', null, null, null
+  ...gallopBass('C#2', 'C#3'),
+  ...gallopBass('B1', 'B2'),
+  ...gallopBass('A1', 'A2'),
+  ...gallopBass('G#1', 'G#2'),
+  ...gallopBass('C#2', 'C#3'),
+  ...gallopBass('A1', 'A2'),
+  ...gallopBass('F#2', 'F#3'),
+  ...gallopBass('G#1', 'G#2')
 ];
 
-// Phase 4: "ENIGMATIC LAST NIGHT" — 144 BPM D-minor Gaster + Megalovania arpeggio climax
+// Phase 4: "VOID ANOMALY // 666" (168 BPM chromatic polychord chaos)
 const P4_LEAD = [
-  'D5', 'D5', 'D6', null, 'A5', null, null, 'G#5', null, 'G5', null, 'F5', null, 'D5', 'F5', 'G5',
-  'C5', 'C5', 'D6', null, 'A5', null, null, 'G#5', null, 'G5', null, 'F5', null, 'D5', 'F5', 'G5',
-  'B4', 'B4', 'D6', null, 'A5', null, 'F5', null, 'A#4', 'A#4', 'D6', null, 'A5', null, 'E5', null,
-  'F5', null, 'E5', 'D5', 'C#5', null, 'D5', 'E5', 'F5', null, 'G5', null, 'A5', null, 'E5', null,
-  'D5', null, 'D#5', null, 'A4', null, 'D#5', null, 'C#5', null, 'D#5', null, 'A4', null, 'D#5', null,
-  'A#4', null, 'C5', null, 'F4', null, 'C5', null, 'A4', null, 'C5', null, 'F4', null, 'E5', null,
-  'F5', null, 'F5', 'F5', null, 'G5', null, 'G#5', null, 'A5', null, 'C6', null, 'A5', 'G5', 'F5',
-  'D6', null, 'D6', null, 'C6', 'A5', 'G5', 'F5', 'E5', null, 'C#5', null, 'D5', null, 'A4', null
+  'D5', 'F5', 'G#5', 'A5', 'D6', null, 'C#6', 'D6', 'A#5', 'A5', 'G#5', 'G5', 'F5', 'E5', 'D5', 'C#5',
+  'D5', 'E5', 'F5', 'G5', 'A5', null, 'D#6', null, 'D6', 'C#6', 'C6', 'B5', 'A#5', 'A5', 'G#5', 'G5',
+  'F5', 'A5', 'C6', 'E6', 'D6', null, 'C#6', 'A5', 'G#5', 'A5', 'A#5', 'C6', 'A5', null, 'F5', null,
+  'G5', 'G#5', 'A5', 'C#6', 'D6', null, 'E6', null, 'F6', 'E6', 'D6', 'C#6', 'A5', 'G5', 'E5', 'C#5',
+  // Void Gaster Chromatic Pulse
+  'D5', 'D#5', 'A5', 'D#5', 'C#5', 'D#5', 'A5', 'D#5', 'C5', 'D5', 'G5', 'D5', 'A#4', 'D5', 'F5', 'D5',
+  'A4', 'C#5', 'E5', 'A5', 'C#6', null, 'A5', 'E5', 'F5', 'G5', 'G#5', 'A5', 'C6', null, 'E6', null,
+  'D6', 'D6', 'F6', null, 'E6', 'D6', 'C#6', 'D6', 'A#5', 'C6', 'D6', 'E6', 'F6', null, 'D6', 'A#5',
+  'A5', 'C#6', 'E6', 'G6', 'F6', 'E6', 'D6', 'C#6', 'D6', null, 'A5', null, 'D5', null, null, null
 ];
 
 const P4_COUNTER = [
   'D4', 'D#4', 'A3', 'D#4', 'D4', 'D#4', 'A3', 'D#4', 'C#4', 'D#4', 'A3', 'D#4', 'C#4', 'D#4', 'A3', 'D#4',
   'C4', 'D4', 'G3', 'D4', 'C4', 'D4', 'G3', 'D4', 'A3', 'C4', 'F3', 'C4', 'A3', 'C4', 'F3', 'C4',
-  'B3', 'D4', 'G3', 'D4', 'B3', 'D4', 'G3', 'D4', 'A#3', 'D4', 'F3', 'D4', 'A#3', 'D4', 'F3', 'D4',
-  'A3', 'C#4', 'E4', 'A4', 'E4', 'C#4', 'A3', 'C#4', 'A3', 'C#4', 'E4', 'G4', 'A4', 'G4', 'E4', 'C#4',
-  'D4', 'F4', 'A4', 'D5', 'A4', 'F4', 'D4', 'F4', 'C#4', 'E4', 'A4', 'C#5', 'A4', 'E4', 'C#4', 'E4',
-  'A#3', 'D4', 'F4', 'A#4', 'F4', 'D4', 'A#3', 'D4', 'A3', 'C4', 'F4', 'A4', 'E4', 'C#4', 'A3', 'C#4',
-  'G3', 'A#3', 'D4', 'G4', 'D4', 'A#3', 'G3', 'A#3', 'A3', 'C#4', 'E4', 'A4', 'E4', 'C#4', 'A3', 'C#4',
-  'A#3', 'D4', 'F4', 'A#4', 'C4', 'E4', 'G4', 'C5', 'A3', 'C#4', 'E4', 'A4', 'D4', 'F4', 'A4', null
+  'F4', 'A4', 'C5', 'F5', 'D4', 'F4', 'A4', 'D5', 'A#3', 'D4', 'F4', 'A#4', 'A3', 'C#4', 'E4', 'A4',
+  'G3', 'A#3', 'D4', 'G4', 'A3', 'C#4', 'E4', 'A4', 'D4', 'F4', 'A4', 'D5', 'A3', 'C#4', 'E4', 'A4',
+  'D4', 'F4', 'G#4', 'D5', 'C#4', 'F4', 'G#4', 'C#5', 'C4', 'E4', 'G4', 'C5', 'A#3', 'D4', 'F4', 'A#4',
+  'A3', 'C#4', 'E4', 'A4', 'E4', 'C#4', 'A3', 'C#4', 'D4', 'F4', 'A4', 'D5', 'E4', 'G#4', 'B4', 'E5',
+  'A#3', 'D4', 'F4', 'A#4', 'C4', 'E4', 'G4', 'C5', 'G3', 'A#3', 'D4', 'G4', 'A#3', 'D4', 'F4', 'A#4',
+  'A3', 'C#4', 'E4', 'A4', 'C#5', 'E5', 'A5', 'G5', 'D5', null, 'A4', null, 'D4', null, null, null
+];
+
+const P4_ARP = [
+  ...arp16('D4', 'F4', 'G#4', 'D5'),
+  ...arp16('D4', 'D#4', 'A4', 'D5'),
+  ...arp16('F4', 'A4', 'C5', 'F5'),
+  ...arp16('A3', 'C#4', 'E4', 'G#4'),
+  ...arp16('D4', 'D#4', 'A4', 'C#5'),
+  ...arp16('A3', 'E4', 'A4', 'C#5'),
+  ...arp16('A#3', 'F4', 'A#4', 'D5'),
+  ...arp16('A3', 'E4', 'C#5', 'A5')
 ];
 
 const P4_BASS = [
-  'D2', 'D2', 'D3', 'D2', 'D2', 'D3', 'D2', 'D3', 'D2', 'D2', 'D3', 'D2', 'D2', 'D3', 'D2', 'D3',
-  'C2', 'C2', 'C3', 'C2', 'C2', 'C3', 'C2', 'C3', 'F2', 'F2', 'F3', 'F2', 'F2', 'F3', 'F2', 'F3',
-  'B1', 'B1', 'B2', 'B1', 'B1', 'B2', 'B1', 'B2', 'A#1', 'A#1', 'A#2', 'A#1', 'A#1', 'A#2', 'A#1', 'A#2',
-  'A1', 'A1', 'A2', 'A1', 'A1', 'A2', 'A1', 'A2', 'A1', 'A2', 'C#2', 'C#3', 'E2', 'E3', 'A2', 'A3',
-  'D2', 'D3', 'D2', 'D3', 'D2', 'D3', 'D2', 'D3', 'C#2', 'C#3', 'C#2', 'C#3', 'C#2', 'C#3', 'C#2', 'C#3',
-  'A#1', 'A#2', 'A#1', 'A#2', 'A#1', 'A#2', 'A#1', 'A#2', 'A1', 'A2', 'A1', 'A2', 'A1', 'A2', 'A1', 'A2',
-  'G1', 'G2', 'G1', 'G2', 'G1', 'G2', 'G1', 'G2', 'A1', 'A2', 'A1', 'A2', 'A1', 'A2', 'A1', 'A2',
-  'A#1', 'A#2', 'A#1', 'A#2', 'C2', 'C3', 'C2', 'C3', 'A1', 'A2', 'A1', 'A2', 'D2', null, 'A2', null
+  ...gallopBass('D2', 'D3'),
+  ...gallopBass('C2', 'C3'),
+  ...gallopBass('A#1', 'A#2'),
+  ...gallopBass('A1', 'A2'),
+  ...gallopBass('D2', 'G#2'),
+  ...gallopBass('A1', 'E2'),
+  ...gallopBass('A#1', 'C2'),
+  ...gallopBass('A1', 'D2')
 ];
 
 const OVERWORLD_LEAD = [
@@ -575,48 +716,62 @@ const TRACKS = {
     drums: null
   },
   phase1: {
-    bpm: 120,
+    title: 'JUDGMENT OVERDRIVE',
+    bpm: 138,
     length: P1_LEAD.length,
     lead: P1_LEAD,
+    arp: P1_ARP,
     bass: P1_BASS,
-    leadWave: 'square',
+    leadWave: 'sawtooth',
     bassWave: 'sawtooth',
+    detuneLead: true,
+    subBass: true,
     leadHold: 0.9,
-    drums: ['K', 'H', 'H', 'H', 'S', 'H', 'K', 'H', 'K', 'H', 'S', 'H', 'K', 'H', 'S', 'H']
+    drums: ['C', 'H', 'K', 'H', 'S', 'H', 'K', 'H', 'K', 'K', 'S', 'H', 'K', 'O', 'S', 'H']
   },
   phase2: {
-    bpm: 132,
+    title: 'CRIMSON VELOCITY',
+    bpm: 150,
     length: P2_LEAD.length,
     lead: P2_LEAD,
     counter: P2_COUNTER,
+    arp: P2_ARP,
     bass: P2_BASS,
-    leadWave: 'square',
+    leadWave: 'sawtooth',
     bassWave: 'sawtooth',
+    detuneLead: true,
+    subBass: true,
     leadHold: 0.9,
-    drums: ['K', 'H', 'K', 'H', 'S', 'H', 'K', 'H', 'K', 'K', 'S', 'H', 'K', 'H', 'S', 'S']
+    drums: ['C', 'H', 'K', 'K', 'S', 'H', 'K', 'O', 'K', 'H', 'S', 'K', 'K', 'O', 'S', 'S']
   },
   phase3: {
-    bpm: 138,
+    title: 'SHATTERED DAWN',
+    bpm: 158,
     length: P3_LEAD.length,
     lead: P3_LEAD,
-    counter: P2_COUNTER,
+    counter: P3_COUNTER,
     bass: P3_BASS,
     leadWave: 'sawtooth',
     bassWave: 'square',
-    leadHold: 1.0,
-    drums: ['K', 'H', 'K', 'H', 'S', 'H', 'K', 'H', 'K', 'H', 'S', 'K', 'K', 'H', 'S', 'H']
+    detuneLead: true,
+    subBass: true,
+    leadHold: 0.95,
+    drums: ['C', 'K', 'K', 'H', 'S', 'H', 'K', 'O', 'K', 'K', 'S', 'S', 'K', 'O', 'S', 'S']
   },
   phase4: {
-    title: 'ENIGMATIC LAST NIGHT',
-    bpm: 144,
+    title: 'VOID ANOMALY // 666',
+    bpm: 168,
     length: P4_LEAD.length,
     lead: P4_LEAD,
     counter: P4_COUNTER,
+    arp: P4_ARP,
     bass: P4_BASS,
     leadWave: 'sawtooth',
-    bassWave: 'square',
+    bassWave: 'sawtooth',
+    detuneLead: true,
+    subBass: true,
     leadHold: 0.95,
-    drums: ['K', 'H', 'K', 'H', 'S', 'H', 'K', 'K', 'K', 'H', 'S', 'H', 'K', 'K', 'S', 'S']
+    drums: ['C', 'K', 'K', 'K', 'S', 'O', 'K', 'K', 'C', 'K', 'S', 'K', 'K', 'O', 'S', 'S']
   },
   gameover: {
     bpm: 84,

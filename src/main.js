@@ -301,9 +301,9 @@ export class UndertaleLastNightGame {
         }
       }
     } else if (this.mode === 'OVERWORLD') {
-      this.overworld.handlePointerMove(x, y);
+      this.overworld.handlePointerMove?.(x, y);
     } else if (this.mode === 'BATTLE') {
-      this.battle.handlePointerMove(x, y);
+      this.battle.handlePointerMove?.(x, y);
     }
   }
 
@@ -337,9 +337,10 @@ export class UndertaleLastNightGame {
       audio.menuMove();
       this.mode = 'TITLE';
     } else if (this.mode === 'OVERWORLD') {
-      this.overworld.handlePointerDown(x, y, this.input);
+      this.overworld.handlePointerDown?.(x, y, this.input);
     } else if (this.mode === 'BATTLE') {
-      this.battle.handlePointerDown(x, y, this.input);
+      this.battle.usedMouseThisBattle = true;
+      this.battle.handlePointerDown?.(x, y, this.input);
     }
   }
 
@@ -1041,6 +1042,21 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         }
       }
       if (hudPill) hudPill.textContent = pillText;
+      if (typeof document !== 'undefined') {
+        if (game.mode === 'BATTLE') {
+          if (game.battle.state === 'CLIMAX_SLEEP') {
+            document.title = 'UNDERTALE: LAST NIGHT — PUSH THE BOX';
+          } else if (game.battle.phase >= 4) {
+            document.title = 'UNDERTALE: LAST NIGHT — HE SEES YOU';
+          } else if (game.battle.phase === 3) {
+            document.title = 'UNDERTALE: LAST NIGHT — DONT BLINK';
+          } else {
+            document.title = 'UNDERTALE: LAST NIGHT';
+          }
+        } else {
+          document.title = 'UNDERTALE: LAST NIGHT';
+        }
+      }
       for (const id of modeButtons) {
         const el = document.getElementById(id);
         if (el) el.classList.toggle('active-mode', id === activeId);

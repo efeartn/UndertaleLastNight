@@ -15,8 +15,11 @@ A playable browser-based **Undertale** fan game built with HTML5 Canvas, zero ex
   - **Blue SOUL**: 4-directional gravity slams (`up`, `down`, `left`, `right`) and moving platforming.
   - **Green SOUL**: Undyne-style center-locked 4-way shield deflecting spears (including healing green spears).
   - **Yellow SOUL**: Justice shooter — tap `Z` / `Enter` for rapid upward bolts, or **Hold `Z` (`>= 0.38s`)** to fire a piercing **Charged Big Shot** that breaks armored blocks & vaporizes small bones.
-- **16 Custom Attacks Across 4 Phases**
-  - Dynamic swaying Battle Box patterns, Sine Bone Corridors, Blaster Carousels, Blackout Cuts, Bone Wheel Labs, **W.D. Gaster** Phase 2–4 Void Intervention (`VOID BLOCKED` story transition into Phase 4), and **#16 Void Singularity**.
+- **High-Intensity Original Boss Soundtrack & 4th-Wall Breaks**
+  - **4 Original 128-Step Multi-Channel Boss Themes** (`audio.js`) with dual detuned leads, 16th-note arpeggios, sub-octave bass, and crash/open hi-hat percussion: **JUDGMENT OVERDRIVE** (138 BPM, Phase 1), **CRIMSON VELOCITY** (150 BPM, Phase 2), **SHATTERED DAWN** (158 BPM, Phase 3), and **VOID ANOMALY // 666** (168 BPM, Phase 4).
+  - **4th-Wall Interference**: Gaster skeletal hands physically grip the outer Battle Box borders (`Phase 3–4`), the Battle Box dynamically **tilts** with chromatic glitch borders, Phase 3/4 turns **scramble the battle action buttons** (`FIGHT`/`ACT`/`ITEM`/`MERCY`), Sans reacts directly to your **HUD Assist toggle, Mute state, mouse clicks, and localStorage Reset count**, and the browser tab `document.title` shifts live during void anomalies.
+- **16 Non-Repeating Multi-Act Attacks Across 4 Phases**
+  - Upgraded multi-act choreography across all 4 phases (bidirectional blue/orange stop gates, orbiting carousel blasters, mid-lane slam finishers, 3-act sine corridors, tilted green shield barrages, 3/4/5-spoke bone wheels, **W.D. Gaster** Phase 2–4 Void Intervention, and **#16 Void Singularity**), with smooth turn progression on Items and Mercy.
 - **Twilight Antechamber & Relic Armory**
   - Explore the Twilight Antechamber before entering the Judgment Hall, inspect your **SAVE Star**, and swap gear at the **Relic Armory Pedestal**:
     - **Weapons**: `Real Knife`, `Burnt Pan` (+item heal / KR cure bonus), `Torn Notebook` (+invulnerability frames)

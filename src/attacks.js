@@ -230,6 +230,10 @@ export class AttackRunner {
     this.boxOffsetX = 0;
     this.boxOffsetY = 0;
     this._boxMotionFn = null;
+    this.boxAngle = 0;
+    this._boxTiltFn = null;
+    this.fourthWallText = '';
+    this.fourthWallTimer = 0;
     this.gasterActive = false;
 
     this.bones = [];
@@ -291,6 +295,16 @@ export class AttackRunner {
 
   setBoxMotion(fn) {
     this._boxMotionFn = fn;
+  }
+
+  setBoxTilt(fn) {
+    this._boxTiltFn = fn;
+  }
+
+  setFourthWallMessage(text, duration = 2.4) {
+    this.fourthWallText = String(text || '');
+    this.fourthWallTimer = duration;
+    audio.fourthWallGlitch?.();
   }
 
   boxCenterX(opts) {
@@ -522,8 +536,11 @@ export class AttackRunner {
     if (this.grazeCooldown > 0) {
       this.grazeCooldown = Math.max(0, this.grazeCooldown - dt);
     }
+    if (this.fourthWallTimer > 0) {
+      this.fourthWallTimer = Math.max(0, this.fourthWallTimer - dt);
+    }
 
-    // Dynamic moving Battle Box animation
+    // Dynamic moving & tilting Battle Box animation
     if (this._boxMotionFn) {
       const nextOffset = this._boxMotionFn(this.elapsed, this.duration);
       const nx = (nextOffset?.x ?? 0) || 0;
@@ -533,6 +550,11 @@ export class AttackRunner {
         this.boxOffsetY = ny;
         battleApi?.setBoxOffset?.(this.boxOffsetX, this.boxOffsetY);
       }
+    }
+    if (this._boxTiltFn) {
+      this.boxAngle = Number(this._boxTiltFn(this.elapsed, this.duration)) || 0;
+    } else {
+      this.boxAngle = 0;
     }
 
     // Trigger scheduled timeline events
@@ -750,6 +772,7 @@ export class AttackRunner {
         this.boxOffsetY = 0;
         battleApi?.setBoxOffset?.(0, 0);
       }
+      this.boxAngle = 0;
       this.finished = true;
     }
   }
@@ -977,6 +1000,22 @@ export class AttackRunner {
       );
     }
 
+    if (this.fourthWallTimer > 0 && this.fourthWallText) {
+      const jitterX = Math.floor(Math.sin(this.elapsed * 42) * 2);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, this.fourthWallTimer * 1.4);
+      ctx.fillStyle = 'rgba(18, 6, 30, 0.9)';
+      ctx.fillRect(110 + jitterX, 46, 420, 22);
+      ctx.strokeStyle = Math.floor(this.elapsed * 16) % 2 === 0 ? '#c084fc' : '#ffef3f';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(110 + jitterX, 46, 420, 22);
+      ctx.fillStyle = '#f3e8ff';
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.fourthWallText, 320 + jitterX, 61);
+      ctx.restore();
+    }
+
     if (this.blackoutFlash > 0) {
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, 640, 480);
@@ -1093,40 +1132,57 @@ const ATTACK_BUILDERS = {
     });
   },
 
-  // 1. Phase 1: Blue Stop Signs, Orange Motion Gates & White Jumps
+  // 1. Phase 1: Bidirectional Blue Stop Signs, Orange Sweeps & Upper Blaster
   blueStopSigns(a, opts) {
     a.targetBoxW = 290;
     a.targetBoxH = 140;
     a.initialSoulMode = 'blue';
     a.initialGravity = 'down';
-    a.duration = 9.4;
+    a.duration = 10.2;
 
+    const L = a.boxLeft(opts);
     const R = a.boxRight(opts);
+    const T = a.boxTop(opts);
     const B = a.boxBottom(opts);
 
     const sequence = [
-      { t: 0.40, color: 'white', h: 26 },
-      { t: 1.50, color: 'blue', h: 116 },
-      { t: 2.65, color: 'white', h: 28 },
-      { t: 3.75, color: 'blue', h: 116 },
-      { t: 4.90, color: 'white', h: 26 },
-      { t: 5.95, color: 'white', h: 28 },
-      { t: 7.05, color: 'orange', h: 116 }
+      { t: 0.35, side: 'right', color: 'white', h: 26, spd: 162 },
+      { t: 1.22, side: 'right', color: 'blue', h: 116, spd: 175 },
+      { t: 3.22, side: 'left', color: 'white', h: 26, spd: 162 },
+      { t: 4.00, side: 'right', color: 'orange', h: 116, spd: 165 },
+      { t: 6.10, side: 'left', color: 'orange', h: 116, spd: 165 },
+      { t: 7.30, side: 'right', color: 'blue', h: 116, spd: 170 },
+      { t: 8.50, side: 'right', color: 'white', h: 26, spd: 172 }
     ];
 
     for (const s of sequence) {
       a._at(s.t, () => {
+        const fromLeft = s.side === 'left';
         a.spawnBone({
-          x: R + 12,
+          x: fromLeft ? L - 16 : R + 12,
           y: B - s.h,
           w: 11,
           h: s.h,
-          vx: -155,
+          vx: fromLeft ? s.spd : -s.spd,
           vy: 0,
           color: s.color
         });
       });
     }
+
+    // Mid-pattern upper-lane blaster: stay low between color gates
+    a._at(5.05, () => {
+      a.spawnBlaster({
+        startX: L - 150,
+        startY: T + 26,
+        x: L - 72,
+        y: T + 26,
+        angle: -Math.PI / 2,
+        scale: 0.85,
+        chargeTime: 0.78,
+        fireTime: 0.42
+      });
+    });
   },
 
   // 2. Phase 1: Platform Peril
@@ -1223,19 +1279,29 @@ const ATTACK_BUILDERS = {
     });
   },
 
-  // 3. Phase 1: Blaster Carousel (Red SOUL)
+  // 3. Phase 1: Blaster Carousel (Orbiting Box, Outer Wings Wheels & Crossfire)
   blasterCarousel(a, opts) {
-    a.targetBoxW = 190;
+    a.targetBoxW = 196;
     a.targetBoxH = 190;
     a.initialSoulMode = 'red';
     a.initialGravity = 'down';
     a.duration = 9.6;
 
+    const L = a.boxLeft(opts);
+    const R = a.boxRight(opts);
     const CX = a.boxCenterX(opts);
     const CY = a.boxCenterY(opts);
 
+    a.setBoxMotion((t, dur) => {
+      const env = Math.min(1, t / 0.8) * Math.min(1, Math.max(0, (dur - 0.8 - t) / 0.8));
+      return {
+        x: Math.cos(t * 1.4) * 14 * env,
+        y: Math.sin(t * 1.4) * 10 * env
+      };
+    });
+
     for (let i = 0; i < 8; i++) {
-      const t = 0.5 + i * 0.78;
+      const t = 0.48 + i * 0.76;
       a._at(t, (_, api) => {
         const theta = (i * Math.PI) / 4;
         const bx = CX + Math.cos(theta) * 165;
@@ -1247,19 +1313,27 @@ const ATTACK_BUILDERS = {
           y: by,
           angle: aimAngleTo(bx, by, api.soul.x, api.soul.y),
           scale: 0.90,
-          chargeTime: 0.75,
+          chargeTime: 0.74,
           fireTime: 0.36
         });
       });
     }
 
-    a._at(7.4, () => {
-      a.spawnBlaster({ startX: CX - 260, startY: CY, x: CX - 165, y: CY, angle: -Math.PI / 2, chargeTime: 0.75, fireTime: 0.45 });
-      a.spawnBlaster({ startX: CX, startY: CY - 250, x: CX, y: CY - 155, angle: 0, chargeTime: 0.75, fireTime: 0.45 });
+    // Sweeping outer bone wheels to break circular predictability
+    a._at(2.5, () => {
+      a.spawnWheel({ x: R + 38, y: CY - 50, vx: -115, radius: 20, vAngle: 2.5, spokes: 4, color: 'white' });
+    });
+    a._at(4.6, () => {
+      a.spawnWheel({ x: L - 38, y: CY + 50, vx: 115, radius: 20, vAngle: -2.5, spokes: 4, color: 'white' });
+    });
+
+    a._at(7.35, () => {
+      a.spawnBlaster({ startX: CX - 260, startY: CY - 34, x: CX - 165, y: CY - 34, angle: -Math.PI / 2, chargeTime: 0.74, fireTime: 0.44 });
+      a.spawnBlaster({ startX: CX + 34, startY: CY - 250, x: CX + 34, y: CY - 155, angle: 0, chargeTime: 0.74, fireTime: 0.44 });
     });
   },
 
-  // 4. Phase 1: Four-Way Gravity Slam
+  // 4. Phase 1: Four-Way Gravity Slam + Mid-Slam Weave & Corner Sniper
   fourWaySlam(a, opts) {
     a.targetBoxW = 185;
     a.targetBoxH = 185;
@@ -1271,13 +1345,13 @@ const ATTACK_BUILDERS = {
     const R = a.boxRight(opts);
     const T = a.boxTop(opts);
     const B = a.boxBottom(opts);
+    const CX = a.boxCenterX(opts);
 
     const slams = [
       { t: 0.4, dir: 'down', warn: { x: L + 3, y: B - 28, w: 179, h: 25 } },
       { t: 2.1, dir: 'left', warn: { x: L + 3, y: T + 3, w: 25, h: 179 } },
       { t: 3.8, dir: 'up', warn: { x: L + 3, y: T + 3, w: 179, h: 25 } },
-      { t: 5.5, dir: 'right', warn: { x: R - 28, y: T + 3, w: 25, h: 179 } },
-      { t: 7.2, dir: 'down', warn: { x: L + 3, y: B - 28, w: 179, h: 25 } }
+      { t: 5.5, dir: 'right', warn: { x: R - 28, y: T + 3, w: 25, h: 179 } }
     ];
 
     for (const s of slams) {
@@ -1306,9 +1380,29 @@ const ATTACK_BUILDERS = {
         }
       });
     }
+
+    // Bonus finale twist instead of a 5th identical slam: settle down -> jump single fast sweep + dodge corner blaster
+    a._at(7.15, (_, api) => {
+      api.slamSoul('down');
+    });
+    a._at(7.45, () => {
+      a.spawnBone({ x: R + 10, y: B - 24, w: 10, h: 24, vx: -160, color: 'white' });
+    });
+    a._at(8.10, (_, api) => {
+      a.spawnBlaster({
+        startX: CX - 220,
+        startY: T - 140,
+        x: CX - 135,
+        y: T - 60,
+        angle: aimAngleTo(CX - 135, T - 60, api.soul.x, api.soul.y),
+        scale: 0.9,
+        chargeTime: 0.78,
+        fireTime: 0.42
+      });
+    });
   },
 
-  // 5. Phase 2: Sine Bone Tunnel + Orange/Blue Gates + Dynamic Swaying Battle Box
+  // 5. Phase 2: 3-Act Morphing Bone Corridor (Sine Tunnel -> Tilted Cross-Weave -> Outer Blaster Rails)
   sineBoneTunnel(a, opts) {
     a.targetBoxW = 250;
     a.targetBoxH = 165;
@@ -1316,40 +1410,62 @@ const ATTACK_BUILDERS = {
     a.initialGravity = 'down';
     a.duration = 9.8;
 
+    const L = a.boxLeft(opts);
     const R = a.boxRight(opts);
     const T = a.boxTop(opts);
     const B = a.boxBottom(opts);
     const CY = a.boxCenterY(opts);
 
     a.setBoxMotion((t, dur) => {
-      const env = Math.min(1, t / 0.9) * Math.min(1, Math.max(0, (dur - 0.8 - t) / 0.8));
+      const env = Math.min(1, t / 0.8) * Math.min(1, Math.max(0, (dur - 0.8 - t) / 0.8));
       return {
-        x: Math.sin(t * 1.45) * 22 * env,
+        x: Math.sin(t * 1.45) * 20 * env,
         y: Math.sin(t * 2.1) * 12 * env
       };
     });
+    a.setBoxTilt((t) => (t >= 3.4 && t <= 6.8 ? Math.sin((t - 3.4) * 2.2) * 0.055 : 0));
 
-    for (let i = 0; i < 18; i++) {
-      const t = 0.35 + i * 0.42;
+    // Act 1 (0.35 - 2.9s): Smooth sine wave tunnel
+    for (let i = 0; i < 6; i++) {
+      const t = 0.35 + i * 0.44;
       a._at(t, () => {
-        const wave = Math.sin(i * 0.65) * 34;
+        const wave = Math.sin(i * 0.75) * 32;
         const gapCenter = CY + wave;
         const gapHalf = 30;
         const topStart = T - 24;
         const botEnd = B + 24;
         a.spawnBone({ x: R + 32, y: topStart, w: 10, h: Math.max(8, gapCenter - gapHalf - topStart), vx: -155 });
         a.spawnBone({ x: R + 32, y: gapCenter + gapHalf, w: 10, h: Math.max(8, botEnd - (gapCenter + gapHalf)), vx: -155 });
-
-        if (i === 5 || i === 14) {
-          a.spawnBone({ x: R + 52, y: T - 24, w: 10, h: a.targetBoxH + 48, vx: -155, color: 'orange' });
-        } else if (i === 10) {
-          a.spawnBone({ x: R + 52, y: T - 24, w: 10, h: a.targetBoxH + 48, vx: -155, color: 'blue' });
-        }
       });
     }
+
+    // Act 2 (3.35 - 6.3s): Bidirectional Left & Right staggered gates + Blue & Orange switches
+    a._at(3.40, () => {
+      a.spawnBone({ x: L - 36, y: T - 20, w: 10, h: 64, vx: 150 });
+      a.spawnBone({ x: L - 36, y: B - 38, w: 10, h: 58, vx: 150 });
+    });
+    a._at(4.20, () => {
+      a.spawnBone({ x: R + 36, y: T - 24, w: 10, h: a.targetBoxH + 48, vx: -155, color: 'blue' });
+    });
+    a._at(5.20, () => {
+      a.spawnBone({ x: L - 36, y: T - 24, w: 10, h: a.targetBoxH + 48, vx: 155, color: 'orange' });
+    });
+    a._at(5.90, () => {
+      a.spawnBone({ x: R + 36, y: T - 20, w: 10, h: 54, vx: -155 });
+      a.spawnBone({ x: R + 36, y: B - 48, w: 10, h: 68, vx: -155 });
+    });
+
+    // Act 3 (6.80 - 9.8s): Outer upper/lower rail blasters (middle lane open) + center dash bone
+    a._at(6.95, () => {
+      a.spawnBlaster({ startX: L - 160, startY: CY - 52, x: L - 72, y: CY - 52, angle: -Math.PI / 2, scale: 0.9, chargeTime: 0.76, fireTime: 0.44 });
+      a.spawnBlaster({ startX: R + 160, startY: CY + 52, x: R + 72, y: CY + 52, angle: Math.PI / 2, scale: 0.9, chargeTime: 0.76, fireTime: 0.44 });
+    });
+    a._at(8.20, () => {
+      a.spawnBone({ x: R + 36, y: CY - 16, w: 11, h: 32, vx: -170, color: 'white' });
+    });
   },
 
-  // 6. Phase 2: Green Shield Barrage (Undyne-style rhythmic spear deflection)
+  // 6. Phase 2: Green Shield Barrage (Tempo Shifts & Tilt)
   greenShieldBarrage(a, opts) {
     a.targetBoxW = 112;
     a.targetBoxH = 112;
@@ -1359,38 +1475,36 @@ const ATTACK_BUILDERS = {
 
     const L = a.boxLeft(opts);
     const T = a.boxTop(opts);
+    a.setBoxTilt((t) => (t >= 5.8 && t <= 9.5 ? Math.sin(t * 4.2) * 0.045 : 0));
+
     a._at(0.05, () => {
       a.spawnWarning({ x: L + 8, y: T + 8, w: a.targetBoxW - 16, h: 24, duration: 0.55, color: '#33e65a', label: 'SHIELD' });
     });
 
     scheduleSpearVolley(a, opts, [
-      // Wave 1: Steady clockwise cardinal warmup (0.50s spacing)
       { t: 0.50, dir: 'up', speed: 185, color: 'cyan' },
       { t: 1.00, dir: 'right', speed: 185, color: 'cyan' },
       { t: 1.50, dir: 'down', speed: 185, color: 'cyan' },
       { t: 2.00, dir: 'left', speed: 185, color: 'cyan' },
-      // Wave 2: Opposite pair rhythms (leave ~2.4s open for optional green bonus)
-      { t: 2.85, dir: 'up', speed: 200, color: 'cyan' },
-      { t: 3.30, dir: 'down', speed: 200, color: 'cyan' },
-      { t: 3.75, dir: 'left', speed: 200, color: 'cyan' },
-      { t: 4.20, dir: 'right', speed: 200, color: 'cyan' },
-      { t: 4.65, dir: 'left', speed: 200, color: 'cyan' },
-      // Mid-attack healing green spear
-      { t: 5.20, dir: 'down', speed: 175, color: 'green' },
-      // Wave 3: Counter-clockwise spin + snappy red accents (0.36s spacing)
-      { t: 5.95, dir: 'up', speed: 215, color: 'cyan' },
-      { t: 6.32, dir: 'left', speed: 215, color: 'cyan' },
-      { t: 6.69, dir: 'down', speed: 215, color: 'cyan' },
-      { t: 7.06, dir: 'right', speed: 215, color: 'cyan' },
-      { t: 7.50, dir: 'left', speed: 225, color: 'red' },
-      { t: 7.88, dir: 'right', speed: 225, color: 'red' },
-      { t: 8.26, dir: 'up', speed: 220, color: 'cyan' },
-      { t: 8.64, dir: 'down', speed: 220, color: 'cyan' },
-      { t: 9.02, dir: 'up', speed: 220, color: 'red' }
+      { t: 2.85, dir: 'up', speed: 205, color: 'cyan' },
+      { t: 3.28, dir: 'down', speed: 205, color: 'red' },
+      { t: 3.72, dir: 'left', speed: 205, color: 'cyan' },
+      { t: 4.15, dir: 'right', speed: 205, color: 'red' },
+      { t: 4.62, dir: 'left', speed: 205, color: 'cyan' },
+      { t: 5.18, dir: 'down', speed: 175, color: 'green' },
+      { t: 5.95, dir: 'up', speed: 220, color: 'cyan' },
+      { t: 6.32, dir: 'left', speed: 220, color: 'red' },
+      { t: 6.69, dir: 'down', speed: 220, color: 'cyan' },
+      { t: 7.06, dir: 'right', speed: 220, color: 'red' },
+      { t: 7.48, dir: 'left', speed: 230, color: 'red' },
+      { t: 7.86, dir: 'right', speed: 230, color: 'red' },
+      { t: 8.24, dir: 'up', speed: 225, color: 'cyan' },
+      { t: 8.62, dir: 'down', speed: 225, color: 'cyan' },
+      { t: 9.00, dir: 'up', speed: 225, color: 'red' }
     ]);
   },
 
-  // 7. Phase 2: Bone Wheel Lab (Rotating bone wheels + Dynamic Moving Box)
+  // 7. Phase 2: Bone Wheel Lab (Moving + Tilting Lab + Dual Blasters)
   boneWheelLab(a, opts) {
     a.targetBoxW = 240;
     a.targetBoxH = 175;
@@ -1410,33 +1524,30 @@ const ATTACK_BUILDERS = {
         y: Math.cos(t * 1.8) * 14 * env
       };
     });
+    a.setBoxTilt((t) => (t >= 5.2 && t <= 9.6 ? Math.sin(t * 2.4) * 0.05 : 0));
 
-    // Twin upper/lower wheels leaving wide central path
     a._at(0.40, () => {
       a.spawnWheel({ x: R + 45, y: CY - 38, vx: -108, radius: 26, vAngle: 2.3, spokes: 4, color: 'white' });
-      a.spawnWheel({ x: L - 45, y: CY + 38, vx: 108, radius: 26, vAngle: -2.3, spokes: 4, color: 'white' });
+      a.spawnWheel({ x: L - 45, y: CY + 38, vx: 108, radius: 26, vAngle: -2.3, spokes: 5, color: 'white' });
     });
 
-    // Slow wide 3-spoke Ferris wheel crossing middle
     a._at(2.35, () => {
       a.spawnWheel({ x: R + 50, y: CY, vx: -95, radius: 34, vAngle: 1.85, spokes: 3, color: 'white' });
     });
 
-    // Blue wheel sweep (pause moving as spokes pass, or dodge edges)
     a._at(4.15, () => {
       a.spawnWheel({ x: L - 50, y: CY, vx: 112, radius: 32, vAngle: -2.1, spokes: 4, color: 'blue' });
     });
 
-    // Oscillating lab wheels with wide vertical sway
     a._at(5.55, () => {
-      a.spawnWheel({ x: R + 45, y: CY - 16, vx: -96, radius: 22, vAngle: 2.8, spokes: 4, waveAmpY: 26, waveFreqY: 2.5 });
+      a.spawnWheel({ x: R + 45, y: CY - 16, vx: -98, radius: 22, vAngle: 2.8, spokes: 4, waveAmpY: 26, waveFreqY: 2.5 });
+      a.spawnBlaster({ startX: R + 160, startY: CY + 48, x: R + 72, y: CY + 48, angle: Math.PI / 2, scale: 0.85, chargeTime: 0.78, fireTime: 0.40 });
     });
-    a._at(6.55, () => {
-      a.spawnWheel({ x: L - 45, y: CY + 16, vx: 96, radius: 22, vAngle: -2.8, spokes: 4, waveAmpY: 26, waveFreqY: 2.5 });
+    a._at(6.65, () => {
+      a.spawnWheel({ x: L - 45, y: CY + 16, vx: 98, radius: 22, vAngle: -2.8, spokes: 5, waveAmpY: 26, waveFreqY: 2.5 });
     });
 
-    // Final balanced wheels + side warning blaster along top lane
-    a._at(7.80, () => {
+    a._at(7.85, () => {
       a.spawnBlaster({
         startX: CX - 260,
         startY: CY - 46,
@@ -1601,8 +1712,10 @@ const ATTACK_BUILDERS = {
 
     a._at(0.05, () => {
       audio.gasterSpeak();
+      a.setFourthWallMessage('⚠ 4TH WALL FRACTURE: BOX TILT ACTIVE', 2.4);
       a.spawnWarning({ x: L + 18, y: T + 10, w: a.targetBoxW - 36, h: 24, duration: 0.75, color: '#c480ff', label: 'GASTER' });
     });
+    a.setBoxTilt((t) => (t < 3.1 || t > 6.3 ? Math.sin(t * 2.1) * 0.065 : 0));
 
     // Matrix 1: Alternating vertical gates with generous 60px center openings
     for (let i = 0; i < 3; i++) {
@@ -1830,8 +1943,10 @@ const ATTACK_BUILDERS = {
     // Act 1 (0.0 - 2.8s): Red SOUL + Bone Wheels + Corner Blasters
     a._at(0.05, () => {
       audio.gasterSpeak();
+      a.setFourthWallMessage('⚠ GASTER IS REWRITING THE CANVAS', 2.5);
       a.spawnWarning({ x: L + 20, y: T + 10, w: a.targetBoxW - 40, h: 24, duration: 0.65, color: '#c480ff', label: 'FINALE' });
     });
+    a.setBoxTilt((t) => (t < 2.75 || t > 8.95 ? Math.sin(t * 2.8) * 0.07 : 0));
     a._at(0.45, () => {
       a.spawnWheel({ x: R + 45, y: CY - 38, vx: -135, radius: 24, vAngle: 2.8, spokes: 4 });
       a.spawnWheel({ x: L - 45, y: CY + 38, vx: 135, radius: 24, vAngle: -2.8, spokes: 4 });
@@ -1912,8 +2027,10 @@ const ATTACK_BUILDERS = {
     // Act 1 (0.0 - 2.8s): Yellow SOUL Charge Shot Breakout
     a._at(0.05, () => {
       audio.gasterSpeak();
+      a.setFourthWallMessage('⚠ TIMELINE ANOMALY: FOUR SOULS UNBOUND', 2.6);
       a.spawnWarning({ x: L + 18, y: T + 10, w: a.targetBoxW - 36, h: 24, duration: 0.65, color: '#ffef3f', label: 'SINGULARITY' });
     });
+    a.setBoxTilt((t) => (t < 2.75 || t > 7.85 ? Math.cos(t * 2.5) * 0.06 : 0));
     scheduleCrackedRow(a, opts, 0.45, {
       count: 6,
       h: 18,

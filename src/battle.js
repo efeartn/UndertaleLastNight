@@ -19,6 +19,7 @@ const BUTTON_Y = 428;
 const ACHIEVEMENTS_STORAGE_KEY = 'undertale_last_night_achievements_v1';
 const ENDLESS_BEST_STORAGE_KEY = 'undertale_last_night_endless_best_v1';
 const NOHIT_STORAGE_KEY = 'undertale_last_night_nohit_v1';
+const RESETS_STORAGE_KEY = 'undertale_last_night_resets_v1';
 
 export const ACHIEVEMENT_DEFS = [
   { id: 'First Graze', title: 'First Graze', desc: 'Collect Tension (TP) by closely grazing a hazard.' },
@@ -89,8 +90,29 @@ export class BattleEngine {
     this.achievementQueue = [];
     this.endlessBestWave = this._loadEndlessBest();
     this.noHitAttacks = this._loadNoHitAttacks();
+    this.resetCount = this._loadResetCount();
 
-    this.resetBattle();
+    this.resetBattle({ skipResetCount: true });
+  }
+
+  _loadResetCount() {
+    if (typeof localStorage === 'undefined') return 0;
+    try {
+      const raw = localStorage.getItem(RESETS_STORAGE_KEY);
+      const val = raw ? Number(raw) : 0;
+      return Number.isFinite(val) && val >= 0 ? val : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  _saveResetCount() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(RESETS_STORAGE_KEY, String(this.resetCount));
+    } catch {
+      // Ignore storage errors
+    }
   }
 
   _loadNoHitAttacks() {
@@ -197,6 +219,14 @@ export class BattleEngine {
 
   resetBattle(options = {}) {
     const turnByPhase = { 1: 0, 2: 5, 3: 9, 4: 12 };
+
+    if (!options.skipResetCount) {
+      this.resetCount = (this.resetCount || 0) + 1;
+      this._saveResetCount();
+    }
+    this.usedMouseThisBattle = false;
+    this.metaCalloutsUsed = new Set();
+    this.buttonOrder = [0, 1, 2, 3];
 
     this.practiceAttackIndex = Number.isInteger(options.practiceAttackIndex)
       ? Math.max(0, Math.min(ATTACK_NAMES.length - 1, options.practiceAttackIndex))
@@ -650,7 +680,36 @@ export class BattleEngine {
     }
 
     const pool = FLAVOR_TEXTS[this.phase] || FLAVOR_TEXTS[1];
-    this.flavorText = pool[this.turnsTaken % pool.length];
+    if (this.phase >= 2 && !this.sans.sleeping && this.practiceAttackIndex === null && this.turnsTaken % 3 === 2) {
+      this.flavorText =
+        this.turnsTaken % 2 === 0
+          ? `* Attempt #${Math.max(1, this.resetCount)} logged in localStorage... Sans winks at the canvas.`
+          : '* Something in the Void keeps glancing past the HTML frame at you.';
+    } else {
+      this.flavorText = pool[this.turnsTaken % pool.length];
+    }
+
+    // 4th-Wall Button Scrambler in Phase 3 & 4
+    this.buttonOrder = [0, 1, 2, 3];
+    if (
+      this.phase >= 3 &&
+      !this.sans.sleeping &&
+      this.practiceAttackIndex === null &&
+      !this.bossRushMode &&
+      this.turnsTaken > 0
+    ) {
+      const order = [0, 1, 2, 3];
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      if (order[0] === 0 && order[1] === 1 && order[2] === 2 && order[3] === 3) {
+        [order[0], order[3]] = [order[3], order[0]];
+      }
+      this.buttonOrder = order;
+      this.addPopup(320, 382, '4TH WALL: BUTTONS SCRAMBLED!', '#c084fc');
+      audio.fourthWallGlitch?.();
+    }
 
     // Activate subtle Menu Bone Hazard in Phase 2+ (not in single-attack practice)
     this.menuBone.active = this.phase >= 2 && !this.sans.sleeping && this.practiceAttackIndex === null;
@@ -691,17 +750,18 @@ export class BattleEngine {
     if (input.justPressed('KeyZ') || input.justPressed('Enter')) {
       audio.menuSelect();
       this.subIndex = 0;
-      if (this.menuIndex === 0) {
+      const actionId = this.buttonOrder ? (this.buttonOrder[this.menuIndex] ?? this.menuIndex) : this.menuIndex;
+      if (actionId === 0) {
         this.state = 'FIGHT_AIM';
         this.fightBar.pos = -1;
         this.fightBar.dir = 1;
         this.fightBar.active = true;
-      } else if (this.menuIndex === 1) {
+      } else if (actionId === 1) {
         this.state = 'ACT_MENU';
-      } else if (this.menuIndex === 2) {
+      } else if (actionId === 2) {
         this.itemPage = 0;
         this.state = 'ITEM_MENU';
-      } else if (this.menuIndex === 3) {
+      } else if (actionId === 3) {
         this.state = 'MERCY_MENU';
       }
     }
@@ -987,7 +1047,7 @@ export class BattleEngine {
       const panNote = weaponSpec.itemHealBonus ? ' (Pan bonus!)' : '';
       this._showBoxDialogue(
         `* You ate the ${item.name}.${panNote}\n* ${item.desc}\n* ${maxStr}`,
-        () => this._advanceTurnAfterAction(0) // Eating doesn't waste fatigue turn progression, still triggers Sans attack!
+        () => this._advanceTurnAfterAction(1) // Advance smoothly into the next pattern instead of repeating!
       );
     }
   }
@@ -1014,10 +1074,10 @@ export class BattleEngine {
       } else {
         this.sans.expression = 'wink';
         this.sans.pose = 'shrug';
-        this._pendingTurnAdvance = 0;
+        this._pendingTurnAdvance = 1;
         const msg = this.endlessMode
           ? "spare? in endless mode? sorry pal, the timeline clock's broken tonight."
-          : "geeettttttt dunked on?? ...nah, not quite yet. keep your guard up — we aren't done talking.";
+          : this._pickFourthWallSpeech("geeettttttt dunked on?? ...nah, not quite yet. keep your guard up — we aren't done talking.");
         this._showSansSpeech(msg, () => this._startDefendAttack());
       }
     }
@@ -1082,12 +1142,34 @@ export class BattleEngine {
     }
   }
 
+  _pickFourthWallSpeech(baseSpeech) {
+    if (!this.metaCalloutsUsed) this.metaCalloutsUsed = new Set();
+    if (this.assistMode && !this.metaCalloutsUsed.has('assist') && this.turnsTaken >= 1) {
+      this.metaCalloutsUsed.add('assist');
+      audio.fourthWallGlitch?.();
+      return "hey... i see that bright green 'Assist: ON' toggle up on your browser HUD. won't stop me from trying though.";
+    }
+    if (audio.muted && !this.metaCalloutsUsed.has('mute') && this.turnsTaken >= 1) {
+      this.metaCalloutsUsed.add('mute');
+      return "did you seriously mute the tab? c'mon, our synth tracks go at 150+ bpm for a reason.";
+    }
+    if (this.usedMouseThisBattle && !this.metaCalloutsUsed.has('mouse') && this.turnsTaken >= 1) {
+      this.metaCalloutsUsed.add('mouse');
+      return "clicking my menu with a mouse cursor? careful—maybe i'll start scrambling where those buttons sit.";
+    }
+    if (this.resetCount >= 3 && !this.metaCalloutsUsed.has('resets') && this.turnIndex >= 2) {
+      this.metaCalloutsUsed.add('resets');
+      return `localStorage says this is timeline attempt #${this.resetCount}. dedication looks weirdly good on you.`;
+    }
+    return baseSpeech;
+  }
+
   _advanceTurnAfterAction(progress = 1) {
     this.turnsTaken += 1;
     if (this.endlessMode) {
       this._pendingTurnAdvance = 1;
       const speech = SANS_SPEECH_BY_TURN[this.endlessCurrentAttackIndex] || SANS_SPEECH_BY_TURN[12];
-      this._showSansSpeech(speech, () => this._startDefendAttack());
+      this._showSansSpeech(this._pickFourthWallSpeech(speech), () => this._startDefendAttack());
       return;
     }
     if (this.bossRushMode) {
@@ -1102,7 +1184,8 @@ export class BattleEngine {
     }
 
     this._pendingTurnAdvance = progress;
-    const speech = SANS_SPEECH_BY_TURN[this.turnIndex] || SANS_SPEECH_BY_TURN[0];
+    const baseSpeech = SANS_SPEECH_BY_TURN[this.turnIndex] || SANS_SPEECH_BY_TURN[0];
+    const speech = progress >= 1 ? this._pickFourthWallSpeech(baseSpeech) : baseSpeech;
     this._showSansSpeech(speech, () => this._startDefendAttack());
   }
 
@@ -1910,10 +1993,20 @@ export class BattleEngine {
       this._renderSansSpeechBubble(ctx);
     }
 
-    // Battle Box
+    // Battle Box (supports 4th-Wall visual tilt transform during Gaster/fracture attacks)
+    const boxTilt = this.state === 'DEFEND_ATTACK' ? (this.runner.boxAngle || 0) : 0;
+    const boxCX = this.box.x + this.box.w / 2;
+    const boxCY = this.box.y + this.box.h / 2;
+    ctx.save();
+    if (Math.abs(boxTilt) > 0.001) {
+      ctx.translate(boxCX, boxCY);
+      ctx.rotate(boxTilt);
+      ctx.translate(-boxCX, -boxCY);
+    }
+
     ctx.fillStyle = '#000000';
     ctx.fillRect(this.box.x, this.box.y, this.box.w, this.box.h);
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = Math.abs(boxTilt) > 0.005 ? '#e879f9' : '#ffffff';
     ctx.lineWidth = 4;
     ctx.strokeRect(this.box.x, this.box.y, this.box.w, this.box.h);
 
@@ -1976,6 +2069,16 @@ export class BattleEngine {
       drawSoul(ctx, this.soul.x, this.soul.y, 'red');
     }
 
+    // 4th-Wall Gaster Box-Grip Hands seizing outer borders in Phase 3/4 Gaster turns
+    if (
+      !this.sans.defeated &&
+      ((this.phase >= 3 && this.runner.gasterActive) || (this.phase === 4 && this.state === 'DEFEND_ATTACK'))
+    ) {
+      this._drawGasterBoxGripHands(ctx);
+    }
+
+    ctx.restore();
+
     // Blaster overlay (drawn above Battle Box border)
     if (this.state === 'DEFEND_ATTACK') {
       this.runner.renderOverlay(ctx);
@@ -1987,8 +2090,10 @@ export class BattleEngine {
     // HP & KR Status Bar Row
     this._renderHpRow(ctx);
 
-    // 4 Action Buttons
-    BUTTON_LABELS.forEach((lbl, idx) => {
+    // 4 Action Buttons (uses this.buttonOrder for Phase 3/4 4th-Wall Scrambler)
+    BUTTON_LABELS.forEach((_, idx) => {
+      const actionId = this.buttonOrder ? (this.buttonOrder[idx] ?? idx) : idx;
+      const lbl = BUTTON_LABELS[actionId] || BUTTON_LABELS[idx];
       const selected =
         this.state !== 'DEFEND_ATTACK' &&
         this.state !== 'SANS_SPEECH' &&
@@ -2043,6 +2148,34 @@ export class BattleEngine {
     // Achievement Toast Notification (top-right)
     this._renderAchievementToast(ctx);
 
+    ctx.restore();
+  }
+
+  _drawGasterBoxGripHands(ctx) {
+    const midY = this.box.y + this.box.h / 2;
+    const lx = this.box.x - 4;
+    const rx = this.box.x + this.box.w + 4;
+    const bob = Math.sin(this.time * 5) * 3;
+    ctx.save();
+    for (const [sideX, dir] of [[lx, 1], [rx, -1]]) {
+      const cx = Math.round(sideX - dir * 8);
+      const cy = Math.round(midY + bob);
+      // Tendril into the void
+      ctx.fillStyle = 'rgba(192, 132, 252, 0.25)';
+      ctx.fillRect(cx - dir * 18, cy - 6, 18, 12);
+      // Palm gripping border
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(cx - 5, cy - 11, 10, 22);
+      // Hole in palm (Void stigma)
+      ctx.fillStyle = '#0a0714';
+      ctx.fillRect(cx - 2, cy - 3, 4, 6);
+      // Fingers curling onto white box border
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx + dir * 4, cy - 11, 7, 4);
+      ctx.fillRect(cx + dir * 4, cy - 4, 8, 4);
+      ctx.fillRect(cx + dir * 4, cy + 3, 8, 4);
+      ctx.fillRect(cx + dir * 3, cy + 9, 6, 3);
+    }
     ctx.restore();
   }
 
