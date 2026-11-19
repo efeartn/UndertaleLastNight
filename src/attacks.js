@@ -23,7 +23,12 @@ export const ATTACK_NAMES = [
   'greenShieldStorm',
   'yellowBlasterBreakout',
   'gasterDualFinale',
-  'voidSingularity'
+  'voidSingularity',
+  // Phase 5 / Secret True Boss: W.D. Gaster Unbound (16..19)
+  'purpleWebWeave',
+  'gasterRuneBarrage',
+  'voidShatterCascade',
+  'darkerYetDarker'
 ];
 
 export const ATTACK_META = [
@@ -170,6 +175,42 @@ export const ATTACK_META = [
     soulMode: 'mixed',
     stars: 5,
     desc: 'Ultimate 4-SOUL Void singularity: Charge Shot barriers, Spear storm, Blue slam & Blaster ring'
+  },
+  {
+    id: 'purpleWebWeave',
+    index: 16,
+    title: 'Purple Web Matrix',
+    phase: 5,
+    soulMode: 'purple',
+    stars: 5,
+    desc: 'Switch cleanly across 3 glowing void web rails through bidirectional bone gates & side blasters'
+  },
+  {
+    id: 'gasterRuneBarrage',
+    index: 17,
+    title: 'Arcane Rune Storm',
+    phase: 5,
+    soulMode: 'purple+red',
+    stars: 5,
+    desc: 'W.D. Gaster Unbound fires horizontal web blasters before unleashing rotating bone wheels'
+  },
+  {
+    id: 'voidShatterCascade',
+    index: 18,
+    title: 'Dimensional Shatter',
+    phase: 5,
+    soulMode: 'mixed',
+    stars: 5,
+    desc: 'Cycle rapidly between Justice Charge Shots, Blue ceiling slams & Purple 3-rail dodging'
+  },
+  {
+    id: 'darkerYetDarker',
+    index: 19,
+    title: 'DARKER YET DARKER',
+    phase: 5,
+    soulMode: 'mixed',
+    stars: 5,
+    desc: 'All 5 SOUL modes in one relentless reality-tilting finale against W.D. Gaster Unbound'
   }
 ];
 
@@ -226,6 +267,7 @@ export class AttackRunner {
     this.targetBoxW = 190;
     this.targetBoxH = 170;
     this.initialSoulMode = 'red';
+    this.currentSoulMode = 'red';
     this.initialGravity = 'down';
     this.boxOffsetX = 0;
     this.boxOffsetY = 0;
@@ -265,6 +307,7 @@ export class AttackRunner {
     if (builder) {
       builder(this, options);
     }
+    this.currentSoulMode = this.initialSoulMode;
 
     if (this.spawnGreenBonus && this.id !== 'finalGambitAndSleep') {
       this._at(2.4, (ctx, api) => {
@@ -291,6 +334,12 @@ export class AttackRunner {
         }
       });
     }
+  }
+
+  getWebLines(box) {
+    const y = box?.y ?? 228;
+    const h = box?.h ?? this.targetBoxH ?? 160;
+    return [y + h * 0.24, y + h * 0.50, y + h * 0.76];
   }
 
   setBoxMotion(fn) {
@@ -522,8 +571,14 @@ export class AttackRunner {
     const api = battleApi
       ? {
           soul: battleApi.soul ?? NOOP_API.soul,
-          slamSoul: (dir) => battleApi.slamSoul?.(dir),
-          setSoulMode: (mode, gravity) => battleApi.setSoulMode?.(mode, gravity),
+          slamSoul: (dir) => {
+            this.currentSoulMode = 'blue';
+            battleApi.slamSoul?.(dir);
+          },
+          setSoulMode: (mode, gravity) => {
+            this.currentSoulMode = mode;
+            battleApi.setSoulMode?.(mode, gravity);
+          },
           setBoxOffset: (ox, oy) => battleApi.setBoxOffset?.(ox, oy),
           addScreenShake: (amount) => battleApi.addScreenShake?.(amount),
           enterClimaxSleep: () => battleApi.enterClimaxSleep?.()
@@ -923,6 +978,23 @@ export class AttackRunner {
     ctx.rect(box.x + 2, box.y + 2, box.w - 4, box.h - 4);
     ctx.clip();
 
+    // Purple SOUL 3-line glowing silk web rails
+    if (this.currentSoulMode === 'purple' || box.webActive) {
+      const rails = this.getWebLines(box);
+      const pulse = 0.65 + 0.35 * Math.sin(this.elapsed * 9);
+      for (const ry of rails) {
+        const yInt = Math.round(ry);
+        ctx.fillStyle = `rgba(217, 70, 239, ${0.32 * pulse})`;
+        ctx.fillRect(Math.round(box.x + 3), yInt - 2, Math.round(box.w - 6), 5);
+        ctx.fillStyle = '#e879f9';
+        ctx.fillRect(Math.round(box.x + 3), yInt - 1, Math.round(box.w - 6), 2);
+        // Anchor beads at edges
+        ctx.fillStyle = '#fae8ff';
+        ctx.fillRect(Math.round(box.x + 5), yInt - 2, 4, 4);
+        ctx.fillRect(Math.round(box.x + box.w - 9), yInt - 2, 4, 4);
+      }
+    }
+
     for (const b of this.bones) {
       if (!b.collected) {
         drawBone(ctx, b.x, b.y, b.w, b.h, b.color, b.orientation);
@@ -1005,14 +1077,14 @@ export class AttackRunner {
       ctx.save();
       ctx.globalAlpha = Math.min(1, this.fourthWallTimer * 1.4);
       ctx.fillStyle = 'rgba(18, 6, 30, 0.9)';
-      ctx.fillRect(110 + jitterX, 46, 420, 22);
+      ctx.fillRect(110 + jitterX, 42, 420, 20);
       ctx.strokeStyle = Math.floor(this.elapsed * 16) % 2 === 0 ? '#c084fc' : '#ffef3f';
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(110 + jitterX, 46, 420, 22);
+      ctx.strokeRect(110 + jitterX, 42, 420, 20);
       ctx.fillStyle = '#f3e8ff';
       ctx.font = '8px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(this.fourthWallText, 320 + jitterX, 61);
+      ctx.fillText(this.fourthWallText, 320 + jitterX, 55);
       ctx.restore();
     }
 
@@ -2091,6 +2163,375 @@ const ATTACK_BUILDERS = {
     a._at(9.25, () => {
       a.spawnBlaster({ startX: L - 160, startY: CY - 42, x: L - 72, y: CY - 42, angle: -Math.PI / 2, scale: 1.0, chargeTime: 0.72, fireTime: 0.44 });
       a.spawnBlaster({ startX: R + 160, startY: CY + 42, x: R + 72, y: CY + 42, angle: Math.PI / 2, scale: 1.0, chargeTime: 0.72, fireTime: 0.44 });
+    });
+  },
+
+  // 16. Phase 5: Purple Web Matrix (3-Line Web Dodging + Rail Blasters)
+  purpleWebWeave(a, opts) {
+    a.targetBoxW = 330;
+    a.targetBoxH = 160;
+    a.initialSoulMode = 'purple';
+    a.duration = 10.8;
+    a.gasterActive = true;
+
+    const L = a.boxLeft(opts);
+    const R = a.boxRight(opts);
+    const T = a.boxTop(opts);
+    const webY = (railIdx) => T + a.targetBoxH * [0.24, 0.50, 0.76][railIdx];
+
+    a._at(0.25, () => a.setFourthWallMessage('MATRIX STRINGS LOCKED', 2.2));
+    a.setBoxTilt((t) => (t > 6.2 ? Math.sin((t - 6.2) * 2.2) * 0.045 : 0));
+
+    const spawnRailPack = (railIdx, side, color = 'purple', spd = 175) => {
+      const fromLeft = side === 'left';
+      a.spawnBone({
+        x: fromLeft ? L - 28 : R + 10,
+        y: webY(railIdx) - 8,
+        w: 22,
+        h: 16,
+        vx: fromLeft ? spd : -spd,
+        vy: 0,
+        color,
+        orientation: 'horizontal'
+      });
+    };
+
+    // Act 1: Rhythmic 2-of-3 rail waves (always leaves 1 clean safe rail)
+    const waves = [
+      { t: 0.45, safe: 2, side: 'right', spd: 170 },
+      { t: 1.25, safe: 0, side: 'left', spd: 175 },
+      { t: 2.05, safe: 1, side: 'right', spd: 185 },
+      { t: 2.85, safe: 2, side: 'left', spd: 185 },
+      { t: 3.65, safe: 0, side: 'right', spd: 195 },
+      { t: 4.45, safe: 1, side: 'left', spd: 195 }
+    ];
+    for (const w of waves) {
+      a._at(w.t, () => {
+        for (let r = 0; r < 3; r++) {
+          if (r !== w.safe) spawnRailPack(r, w.side, r === 1 ? 'white' : 'purple', w.spd);
+        }
+      });
+    }
+
+    // Mid-pattern healing green bone drifting safely along middle rail
+    a._at(5.25, () => spawnRailPack(1, 'right', 'green', 155));
+
+    // Act 2: Horizontal Rail Blasters + opposite rail sweep
+    a._at(5.85, () => {
+      a.spawnBlaster({ startX: L - 150, startY: webY(0), x: L - 72, y: webY(0), angle: -Math.PI / 2, scale: 0.9, chargeTime: 0.78, fireTime: 0.4 });
+      spawnRailPack(2, 'right', 'purple', 180);
+    });
+    a._at(7.15, () => {
+      a.spawnBlaster({ startX: R + 150, startY: webY(2), x: R + 72, y: webY(2), angle: Math.PI / 2, scale: 0.9, chargeTime: 0.78, fireTime: 0.4 });
+      spawnRailPack(0, 'left', 'purple', 185);
+    });
+
+    // Act 3: Final outer rail pincer keeping Rail 1 clean
+    a._at(8.35, () => {
+      a.setFourthWallMessage('REALITY MATRIX OVERRIDE', 2.0);
+      a.spawnBlaster({ startX: L - 150, startY: webY(0), x: L - 72, y: webY(0), angle: -Math.PI / 2, scale: 0.9, chargeTime: 0.76, fireTime: 0.42 });
+      a.spawnBlaster({ startX: R + 150, startY: webY(2), x: R + 72, y: webY(2), angle: Math.PI / 2, scale: 0.9, chargeTime: 0.76, fireTime: 0.42 });
+    });
+  },
+
+  // 17. Phase 5: Arcane Rune Storm (Purple Web -> Red SOUL Bone Wheels & Crossfire)
+  gasterRuneBarrage(a, opts) {
+    a.targetBoxW = 310;
+    a.targetBoxH = 166;
+    a.initialSoulMode = 'purple';
+    a.duration = 11.2;
+    a.gasterActive = true;
+
+    const L = a.boxLeft(opts);
+    const R = a.boxRight(opts);
+    const T = a.boxTop(opts);
+    const CX = a.boxCenterX(opts);
+    const CY = a.boxCenterY(opts);
+    const webY = (railIdx) => T + a.targetBoxH * [0.24, 0.50, 0.76][railIdx];
+
+    a._at(0.2, () => a.setFourthWallMessage('ENTRY NUMBER SEVENTEEN', 2.4));
+    a.setBoxTilt((t) => Math.sin(t * 2.0) * 0.05);
+
+    const railWaves = [
+      { t: 0.45, rails: [0, 2], side: 'right', spd: 185 },
+      { t: 1.25, rails: [1], side: 'left', spd: 190 },
+      { t: 2.05, rails: [0, 1], side: 'right', spd: 195 },
+      { t: 2.85, rails: [1, 2], side: 'left', spd: 195 }
+    ];
+    for (const rw of railWaves) {
+      a._at(rw.t, () => {
+        for (const r of rw.rails) {
+          const fromLeft = rw.side === 'left';
+          a.spawnBone({
+            x: fromLeft ? L - 26 : R + 8,
+            y: webY(r) - 8,
+            w: 22,
+            h: 16,
+            vx: fromLeft ? rw.spd : -rw.spd,
+            vy: 0,
+            color: r === 1 ? 'white' : 'purple',
+            orientation: 'horizontal'
+          });
+        }
+      });
+    }
+
+    a._at(3.65, () => {
+      a.spawnBlaster({ startX: L - 150, startY: webY(1), x: L - 72, y: webY(1), angle: -Math.PI / 2, scale: 0.9, chargeTime: 0.76, fireTime: 0.42 });
+    });
+
+    // Act 2: Switch to Red SOUL -> Arcane rotating bone wheels & corner blasters
+    a._at(4.95, (_, api) => {
+      a.blackoutFlash = 0.14;
+      audio.blackout();
+      api.setSoulMode('red');
+    });
+
+    a._at(5.35, () => {
+      a.spawnWheel({
+        x: R + 45,
+        y: CY - 34,
+        vx: -118,
+        vy: 0,
+        radius: 28,
+        spokes: 4,
+        vAngle: 3.1,
+        color: 'purple',
+        life: 4.5
+      });
+      a.spawnWheel({
+        x: L - 45,
+        y: CY + 34,
+        vx: 118,
+        vy: 0,
+        radius: 28,
+        spokes: 4,
+        vAngle: -3.1,
+        color: 'white',
+        life: 4.5
+      });
+    });
+
+    a._at(7.25, () => {
+      a.spawnBlaster({
+        startX: L - 130,
+        startY: T - 110,
+        x: L - 54,
+        y: T - 46,
+        angle: aimAngleTo(L - 54, T - 46, CX, CY),
+        scale: 0.95,
+        chargeTime: 0.78,
+        fireTime: 0.42
+      });
+    });
+
+    a._at(8.55, () => {
+      a.spawnBlaster({
+        startX: R + 130,
+        startY: T - 110,
+        x: R + 54,
+        y: T - 46,
+        angle: aimAngleTo(R + 54, T - 46, CX, CY),
+        scale: 0.95,
+        chargeTime: 0.78,
+        fireTime: 0.42
+      });
+    });
+  },
+
+  // 18. Phase 5: Dimensional Shatter (Yellow Charge -> Blue Ceiling Slam -> Purple 3-Rail Finale)
+  voidShatterCascade(a, opts) {
+    a.targetBoxW = 290;
+    a.targetBoxH = 164;
+    a.initialSoulMode = 'yellow';
+    a.duration = 11.4;
+    a.gasterActive = true;
+
+    const L = a.boxLeft(opts);
+    const R = a.boxRight(opts);
+    const T = a.boxTop(opts);
+    const B = a.boxBottom(opts);
+    const webY = (railIdx) => T + a.targetBoxH * [0.24, 0.50, 0.76][railIdx];
+
+    a._at(0.2, () => a.setFourthWallMessage('DIMENSIONAL CORE FRACTURING', 2.4));
+
+    // Act 1 (0.4 - 3.6s): Yellow Justice descending cracked walls + upper blaster
+    scheduleCrackedRow(a, opts, 0.45, { count: 6, h: 18, vy: 72, hp: 2 });
+    scheduleCrackedRow(a, opts, 1.85, { count: 6, h: 18, vy: 76, hp: 1 });
+    a._at(2.15, () => {
+      a.spawnBlaster({ startX: L - 150, startY: T + 34, x: L - 72, y: T + 34, angle: -Math.PI / 2, scale: 0.88, chargeTime: 0.78, fireTime: 0.4 });
+    });
+
+    // Act 2 (3.85 - 7.1s): Blue SOUL Ceiling Slam + Down Slam with warning!
+    a._at(3.85, (_, api) => {
+      a.destructibles = [];
+      a.shots = [];
+      a.blackoutFlash = 0.12;
+      audio.blackout();
+      api.slamSoul('up');
+      a.spawnWarning({ x: L + 3, y: T + 3, w: a.targetBoxW - 6, h: 25, duration: 0.65, label: '!' });
+    });
+    a._at(4.52, () => {
+      for (let bx = L + 6; bx < R - 10; bx += 14) {
+        a.spawnBone({ x: bx, y: T, w: 9, h: 22, life: 0.28 });
+      }
+    });
+    a._at(5.25, (_, api) => {
+      api.slamSoul('down');
+      a.spawnWarning({ x: L + 3, y: B - 28, w: a.targetBoxW - 6, h: 25, duration: 0.65, label: '!' });
+    });
+    a._at(5.92, () => {
+      for (let bx = L + 6; bx < R - 10; bx += 14) {
+        a.spawnBone({ x: bx, y: B - 22, w: 9, h: 22, life: 0.28 });
+      }
+    });
+
+    // Act 3 (7.25 - 11.2s): Purple SOUL 3-rail finale + healing bone
+    a._at(7.25, (_, api) => {
+      a.blackoutFlash = 0.12;
+      audio.blackout();
+      api.setSoulMode('purple');
+    });
+    const finalRails = [
+      { t: 7.55, safe: 0, side: 'right' },
+      { t: 8.35, safe: 2, side: 'left' },
+      { t: 9.15, safe: 1, side: 'right' }
+    ];
+    for (const fw of finalRails) {
+      a._at(fw.t, () => {
+        for (let r = 0; r < 3; r++) {
+          if (r === fw.safe) continue;
+          const fromLeft = fw.side === 'left';
+          a.spawnBone({
+            x: fromLeft ? L - 26 : R + 8,
+            y: webY(r) - 8,
+            w: 22,
+            h: 16,
+            vx: fromLeft ? 190 : -190,
+            vy: 0,
+            color: r === 1 ? 'white' : 'purple',
+            orientation: 'horizontal'
+          });
+        }
+      });
+    }
+    a._at(9.85, () => {
+      a.spawnBone({
+        x: R + 8,
+        y: webY(1) - 8,
+        w: 20,
+        h: 16,
+        vx: -165,
+        vy: 0,
+        color: 'green',
+        orientation: 'horizontal'
+      });
+    });
+  },
+
+  // 19. Phase 5: DARKER YET DARKER (5-SOUL Grand Climax vs W.D. Gaster Unbound)
+  darkerYetDarker(a, opts) {
+    a.targetBoxW = 300;
+    a.targetBoxH = 166;
+    a.initialSoulMode = 'purple';
+    a.duration = 12.6;
+    a.gasterActive = true;
+
+    const L = a.boxLeft(opts);
+    const R = a.boxRight(opts);
+    const T = a.boxTop(opts);
+    const B = a.boxBottom(opts);
+    const CX = a.boxCenterX(opts);
+    const webY = (railIdx) => T + a.targetBoxH * [0.24, 0.50, 0.76][railIdx];
+
+    a._at(0.15, () => a.setFourthWallMessage('DARKER, YET DARKER...', 2.6));
+    a.setBoxTilt((t) => (t > 8.0 ? Math.sin((t - 8.0) * 2.1) * 0.055 : 0));
+
+    // Act 1 (0.35 - 2.7s): Purple 3-rail opening
+    const pOpen = [
+      { t: 0.45, safe: 2, side: 'right' },
+      { t: 1.25, safe: 0, side: 'left' },
+      { t: 2.05, safe: 1, side: 'right' }
+    ];
+    for (const pw of pOpen) {
+      a._at(pw.t, () => {
+        for (let r = 0; r < 3; r++) {
+          if (r === pw.safe) continue;
+          const fromLeft = pw.side === 'left';
+          a.spawnBone({
+            x: fromLeft ? L - 26 : R + 8,
+            y: webY(r) - 8,
+            w: 22,
+            h: 16,
+            vx: fromLeft ? 185 : -185,
+            vy: 0,
+            color: 'purple',
+            orientation: 'horizontal'
+          });
+        }
+      });
+    }
+
+    // Act 2 (2.85 - 5.2s): Green SOUL Spear Rhythm
+    a._at(2.85, (_, api) => {
+      a.bones = [];
+      a.blackoutFlash = 0.12;
+      audio.blackout();
+      api.setSoulMode('green');
+    });
+    scheduleSpearVolley(a, opts, [
+      { t: 3.10, dir: 'up', speed: 220, dist: 190, color: 'cyan' },
+      { t: 3.45, dir: 'left', speed: 220, dist: 190, color: 'red' },
+      { t: 3.80, dir: 'down', speed: 220, dist: 190, color: 'cyan' },
+      { t: 4.15, dir: 'right', speed: 185, dist: 190, color: 'green' },
+      { t: 4.50, dir: 'up', speed: 220, dist: 190, color: 'red' },
+      { t: 4.85, dir: 'right', speed: 220, dist: 190, color: 'cyan' }
+    ]);
+
+    // Act 3 (5.35 - 7.9s): Yellow SOUL Justice Surge
+    a._at(5.35, (_, api) => {
+      a.spears = [];
+      a.blackoutFlash = 0.12;
+      audio.blackout();
+      api.setSoulMode('yellow');
+    });
+    scheduleCrackedRow(a, opts, 5.55, { count: 6, h: 18, vy: 76, hp: 2 });
+    a._at(6.65, () => {
+      a.spawnBlaster({ startX: L - 150, startY: T + 34, x: L - 72, y: T + 34, angle: -Math.PI / 2, scale: 0.85, chargeTime: 0.78, fireTime: 0.4 });
+    });
+
+    // Act 4 (8.05 - 10.1s): Blue SOUL Dual Slams
+    a._at(8.05, (_, api) => {
+      a.destructibles = [];
+      a.shots = [];
+      a.blackoutFlash = 0.12;
+      audio.blackout();
+      api.slamSoul('down');
+      a.spawnWarning({ x: L + 3, y: B - 28, w: a.targetBoxW - 6, h: 25, duration: 0.64, label: '!' });
+    });
+    a._at(8.71, () => {
+      for (let bx = L + 6; bx < R - 10; bx += 14) {
+        a.spawnBone({ x: bx, y: B - 22, w: 9, h: 22, life: 0.26 });
+      }
+    });
+    a._at(9.20, (_, api) => {
+      api.slamSoul('right');
+      a.spawnWarning({ x: R - 28, y: T + 3, w: 25, h: a.targetBoxH - 6, duration: 0.64, label: '!' });
+    });
+    a._at(9.86, () => {
+      for (let by = T + 6; by < B - 10; by += 14) {
+        a.spawnBone({ x: R - 22, y: by, w: 22, h: 9, orientation: 'horizontal', life: 0.26 });
+      }
+    });
+
+    // Act 5 (10.35 - 12.5s): Red SOUL 4-Corner Blaster Finale
+    a._at(10.35, (_, api) => {
+      api.setSoulMode('red');
+      a.setFourthWallMessage('NO MORE TIMELINES LEFT', 2.2);
+    });
+    a._at(10.55, () => {
+      a.spawnBlaster({ startX: CX - 64, startY: T - 170, x: CX - 64, y: T - 70, angle: 0, scale: 0.98, chargeTime: 0.74, fireTime: 0.44 });
+      a.spawnBlaster({ startX: CX + 64, startY: T - 170, x: CX + 64, y: T - 70, angle: 0, scale: 0.98, chargeTime: 0.74, fireTime: 0.44 });
     });
   }
 };

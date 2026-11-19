@@ -2,15 +2,20 @@
 
 import { audio } from './audio.js';
 import {
+  SOUL_SKINS,
   drawChest,
   drawDialoguePortrait,
+  drawEchoFlower,
   drawFriskOverworld,
+  drawGasterOverlay,
   drawJudgmentHallBackdrop,
   drawJudgmentHallForegroundPillars,
   drawRelicPedestal,
   drawSansOverworld,
   drawSaveStar,
-  drawSoul
+  drawSoul,
+  drawSoulShrine,
+  drawVoidDoor
 } from './sprites.js';
 
 export const WEAPONS = {
@@ -40,6 +45,29 @@ export const WEAPONS = {
     itemHealBonus: 0,
     itemKrClearBonus: 0,
     invulnBonus: 0.15
+  },
+  'Empty Gun': {
+    name: 'Empty Gun',
+    at: 96,
+    cost: 160,
+    perk: 'AT 96 — Faster Yellow shots & Big Shot charge.',
+    shortPerk: 'Fast Yellow Shot/Charge',
+    itemHealBonus: 0,
+    itemKrClearBonus: 0,
+    invulnBonus: 0,
+    yellowFastCharge: true
+  },
+  'Void Blade': {
+    name: 'Void Blade',
+    at: 105,
+    cost: 220,
+    perk: 'AT 105 — +20% TP gain & 0.72s Dash cooldown.',
+    shortPerk: '+20% TP & Fast Dash',
+    itemHealBonus: 0,
+    itemKrClearBonus: 0,
+    invulnBonus: 0,
+    tpMult: 1.2,
+    dashCooldownMult: 0.75
   }
 };
 
@@ -70,6 +98,28 @@ export const ARMORS = {
     dmgReduction: 0,
     krReduction: 0,
     endTurnHeal: 2
+  },
+  'Void Cloak': {
+    name: 'Void Cloak',
+    df: 96,
+    cost: 180,
+    perk: 'DF 96 — +0.06s Dash i-frames & wider graze aura.',
+    shortPerk: '+Dash i-frames & Graze',
+    dmgReduction: 1,
+    krReduction: 0,
+    endTurnHeal: 0,
+    dashInvulnBonus: 0.06,
+    grazeRadiusBonus: 4
+  },
+  'Heart Locket+': {
+    name: 'Heart Locket+',
+    df: 105,
+    cost: 240,
+    perk: 'DF 105 — -2 dmg, -1 KR, & +1 HP end-of-turn.',
+    shortPerk: '-2 dmg / -1 KR / +1 HP',
+    dmgReduction: 2,
+    krReduction: 1,
+    endTurnHeal: 1
   }
 };
 
@@ -117,10 +167,21 @@ export class OverworldEngine {
 
     this.inventory = DEFAULT_INVENTORY();
     this.battleCleared = false;
-    this.lastEnding = null; // 'truce' | 'strike'
+    this.lastEnding = null; // 'truce' | 'strike' | 'void_unbound'
     this.lastRank = null;
     this.encounterTriggered = false;
     this.sansVisibleInCorridor = true;
+    this.hasVoidKey = false;
+    this.soulSkin = 'classic';
+    this.ownedRelics = new Set([
+      'Real Knife',
+      'Burnt Pan',
+      'Torn Notebook',
+      'The Locket',
+      'Cloudy Glasses',
+      'Stained Apron'
+    ]);
+    this.unlockedSkins = new Set(['classic', 'void_prism', 'golden_dawn']);
 
     // Dust motes for Judgment Hall atmosphere
     this.dust = Array.from({ length: 28 }, (_, i) => ({
@@ -161,6 +222,15 @@ export class OverworldEngine {
       if (typeof data.battleCleared === 'boolean') this.battleCleared = data.battleCleared;
       if (data.lastEnding) this.lastEnding = data.lastEnding;
       if (data.lastRank) this.lastRank = data.lastRank;
+      if (typeof data.gold === 'number') this.stats.gold = data.gold;
+      if (typeof data.hasVoidKey === 'boolean') this.hasVoidKey = data.hasVoidKey;
+      if (data.soulSkin && SOUL_SKINS[data.soulSkin]) this.soulSkin = data.soulSkin;
+      if (Array.isArray(data.ownedRelics)) {
+        data.ownedRelics.forEach((r) => this.ownedRelics.add(r));
+      }
+      if (Array.isArray(data.unlockedSkins)) {
+        data.unlockedSkins.forEach((s) => this.unlockedSkins.add(s));
+      }
       return true;
     } catch {
       return false;
@@ -176,6 +246,11 @@ export class OverworldEngine {
         inventory: this.inventory,
         weapon: this.stats.weapon,
         armor: this.stats.armor,
+        gold: this.stats.gold,
+        hasVoidKey: this.hasVoidKey,
+        soulSkin: this.soulSkin,
+        ownedRelics: Array.from(this.ownedRelics),
+        unlockedSkins: Array.from(this.unlockedSkins),
         battleCleared: this.battleCleared,
         lastEnding: this.lastEnding,
         lastRank: this.lastRank,
@@ -193,16 +268,24 @@ export class OverworldEngine {
       this.player.x = spawnX ?? 140;
       this.player.y = spawnY ?? 360;
       audio.playBGM('overworld');
+    } else if (roomId === 'echo_sanctum') {
+      this.player.x = spawnX ?? 560;
+      this.player.y = spawnY ?? 360;
+      audio.playBGM('echo_sanctum');
+    } else if (roomId === 'void_vault') {
+      this.player.x = spawnX ?? 555;
+      this.player.y = spawnY ?? 360;
+      audio.playBGM('phase4');
     } else if (roomId === 'corridor') {
       this.player.x = spawnX ?? 64;
       this.player.y = spawnY ?? 365;
       this.encounterTriggered = false;
       this.sansVisibleInCorridor = !this.battleCleared;
-      audio.playBGM(this.battleCleared ? 'ending' : 'overworld');
+      audio.playBGM(this.battleCleared ? 'victory' : 'overworld');
     } else if (roomId === 'throne_approach') {
       this.player.x = spawnX ?? 90;
       this.player.y = spawnY ?? 365;
-      audio.playBGM('ending');
+      audio.playBGM('victory');
     }
   }
 
@@ -321,9 +404,21 @@ export class OverworldEngine {
     this.player.y = Math.max(314, Math.min(436, this.player.y));
 
     if (this.roomId === 'antechamber') {
-      this.player.x = Math.max(46, Math.min(626, this.player.x));
+      this.player.x = Math.max(18, Math.min(626, this.player.x));
       if (this.player.x >= 612) {
         this.enterRoom('corridor', 52, this.player.y);
+      } else if (this.player.x <= 24) {
+        this.enterRoom('echo_sanctum', 575, this.player.y);
+      }
+    } else if (this.roomId === 'echo_sanctum') {
+      this.player.x = Math.max(82, Math.min(620, this.player.x));
+      if (this.player.x >= 606) {
+        this.enterRoom('antechamber', 54, this.player.y);
+      }
+    } else if (this.roomId === 'void_vault') {
+      this.player.x = Math.max(110, Math.min(620, this.player.x));
+      if (this.player.x >= 606) {
+        this.enterRoom('echo_sanctum', 110, this.player.y);
       }
     } else if (this.roomId === 'corridor') {
       this.player.x = Math.max(18, Math.min(1080, this.player.x));
@@ -362,11 +457,11 @@ export class OverworldEngine {
   }
 
   _openWeaponSwap() {
-    const names = Object.keys(WEAPONS);
+    const names = Object.keys(WEAPONS).filter((n) => this.ownedRelics.has(n));
     this.startDialogue([
       {
         speaker: 'narrator',
-        text: `* Select a Weapon (Current: ${this.stats.weapon}):\n* Pan: +4HP/-3KR item | Notebook: +0.15s i-frames`,
+        text: `* Select a Weapon (Current: ${this.stats.weapon}):\n* Pan: +4HP/-3KR | Notebook: +i-frames | Shrine unlocks more`,
         choices: [...names, 'Back'],
         onChoice: (idx) => {
           if (idx >= names.length) {
@@ -385,7 +480,7 @@ export class OverworldEngine {
   }
 
   _openArmorSwap() {
-    const names = Object.keys(ARMORS);
+    const names = Object.keys(ARMORS).filter((n) => this.ownedRelics.has(n));
     this.startDialogue([
       {
         speaker: 'narrator',
@@ -402,6 +497,112 @@ export class OverworldEngine {
           this.stats.df = spec.df;
           audio.save();
           this.startDialogue([`* Equipped ${spec.name}!\n* ${spec.perk}`]);
+        }
+      }
+    ]);
+  }
+
+  _openShrineShop() {
+    this.startDialogue([
+      {
+        speaker: 'narrator',
+        text: `* Sanctum Shrine — Your Gold: ${this.stats.gold}G | Skin: ${SOUL_SKINS[this.soulSkin]?.name || 'Classic Soul'}\n* Acquire hidden Void Relics & SOUL Auras?`,
+        choices: ['Relic Forge', 'SOUL Skins', 'Leave'],
+        onChoice: (idx) => {
+          if (idx === 0) this._openRelicShopMenu();
+          else if (idx === 1) this._openSkinMenu();
+        }
+      }
+    ]);
+  }
+
+  _openRelicShopMenu() {
+    const items = [
+      { kind: 'weapon', name: 'Empty Gun', cost: 160 },
+      { kind: 'weapon', name: 'Void Blade', cost: 220 },
+      { kind: 'armor', name: 'Void Cloak', cost: 180 },
+      { kind: 'armor', name: 'Heart Locket+', cost: 240 }
+    ];
+    const choices = items.map((it) =>
+      this.ownedRelics.has(it.name) ? `${it.name} [OWNED]` : `${it.name} (${it.cost}G)`
+    );
+    this.startDialogue([
+      {
+        speaker: 'narrator',
+        text: `* Sanctum Relic Forge — Available Gold: ${this.stats.gold}G\n* Choose a Relic to forge or equip:`,
+        choices: [...choices, 'Back'],
+        onChoice: (idx) => {
+          if (idx >= items.length) {
+            this._openShrineShop();
+            return;
+          }
+          const it = items[idx];
+          const spec = it.kind === 'weapon' ? WEAPONS[it.name] : ARMORS[it.name];
+          if (this.ownedRelics.has(it.name)) {
+            if (it.kind === 'weapon') {
+              this.stats.weapon = spec.name;
+              this.stats.at = spec.at;
+            } else {
+              this.stats.armor = spec.name;
+              this.stats.df = spec.df;
+            }
+            this.writeSaveData();
+            audio.save();
+            this.startDialogue([`* Equipped ${spec.name}!\n* ${spec.perk}`]);
+            return;
+          }
+          if (this.stats.gold < it.cost) {
+            audio.menuMove();
+            this.startDialogue([`* Not enough Gold! Need ${it.cost}G (You have ${this.stats.gold}G).`]);
+            return;
+          }
+          this.stats.gold -= it.cost;
+          this.ownedRelics.add(it.name);
+          if (it.kind === 'weapon') {
+            this.stats.weapon = spec.name;
+            this.stats.at = spec.at;
+          } else {
+            this.stats.armor = spec.name;
+            this.stats.df = spec.df;
+          }
+          this.writeSaveData();
+          audio.achievement();
+          this.startDialogue([`* Forged & Equipped ${spec.name}!\n* ${spec.perk}`]);
+        }
+      }
+    ]);
+  }
+
+  _openSkinMenu() {
+    const skins = Object.values(SOUL_SKINS);
+    const choices = skins.map((sk) =>
+      this.unlockedSkins.has(sk.id)
+        ? `${sk.name}${this.soulSkin === sk.id ? ' [ON]' : ''}`
+        : `${sk.name} (100G)`
+    );
+    this.startDialogue([
+      {
+        speaker: 'narrator',
+        text: `* SOUL Aura Shrine — Gold: ${this.stats.gold}G | Current: ${SOUL_SKINS[this.soulSkin]?.name || 'Classic'}`,
+        choices: [...choices.slice(0, 5), 'Back'],
+        onChoice: (idx) => {
+          if (idx >= 5) {
+            this._openShrineShop();
+            return;
+          }
+          const sk = skins[idx];
+          if (!this.unlockedSkins.has(sk.id)) {
+            if (this.stats.gold < 100) {
+              this.startDialogue([`* Need 100G to unlock ${sk.name}.`]);
+              return;
+            }
+            this.stats.gold -= 100;
+            this.unlockedSkins.add(sk.id);
+          }
+          this.soulSkin = sk.id;
+          this.writeSaveData();
+          audio.save();
+          this.startDialogue([`* SOUL Aura set to ${sk.name}!\n* ${sk.desc}`]);
         }
       }
     ]);
@@ -486,6 +687,105 @@ export class OverworldEngine {
           },
           '* The echoes fade. Press [C] to review your STAT perks or swap gear at the east pedestal.'
         ]);
+        return;
+      }
+    }
+
+    if (this.roomId === 'echo_sanctum') {
+      // Secret Grey Void Door at (72, 326)
+      if (Math.hypot(px - 72, py - 326) < 62) {
+        audio.menuSelect();
+        this.startDialogue([
+          '* A lone grey door stands humming quietly in the mist.',
+          '* Turn the cold handle?',
+          {
+            speaker: 'narrator',
+            text: '* Enter the grey door?',
+            choices: ['Open Door', 'Step Back'],
+            onChoice: (idx) => {
+              if (idx === 0) {
+                audio.gasterSpeak();
+                this.enterRoom('void_vault', 540, 360);
+              }
+            }
+          }
+        ]);
+        return;
+      }
+
+      // Echo Flower 1 (210, 328)
+      if (Math.hypot(px - 210, py - 328) < 52) {
+        audio.echoFlower();
+        this.startDialogue([
+          '* You lean in toward the glowing Echo Flower...',
+          '* "...two timelines left... the skeleton guards the hall, while a shadow pulls the strings from above..."'
+        ]);
+        return;
+      }
+
+      // Echo Flower 2 (320, 324)
+      if (Math.hypot(px - 320, py - 324) < 52) {
+        audio.echoFlower();
+        this.startDialogue([
+          '* The Echo Flower shimmers with violet pollen...',
+          '* "...hold [X] or [Shift] during attacks to DASH through impossible patterns with i-frames..."'
+        ]);
+        return;
+      }
+
+      // Echo Flower 3 (435, 328)
+      if (Math.hypot(px - 435, py - 328) < 52) {
+        audio.echoFlower();
+        this.startDialogue([
+          '* The flower whispers in fractured static...',
+          '* "...take the Void Key behind the grey door to shatter Phase 4\'s ending and challenge PHASE 5..."'
+        ]);
+        return;
+      }
+
+      // Relic & Skin Shrine (525, 344)
+      if (Math.hypot(px - 525, py - 344) < 58) {
+        audio.menuSelect();
+        this._openShrineShop();
+        return;
+      }
+    }
+
+    if (this.roomId === 'void_vault') {
+      // W.D. Gaster Fragment at (260, 325)
+      if (Math.hypot(px - 260, py - 340) < 92) {
+        audio.gasterSpeak();
+        if (!this.hasVoidKey) {
+          this.hasVoidKey = true;
+          this.unlockedSkins.add('gaster_mono');
+          this.soulSkin = 'gaster_mono';
+          this.stats.gold += 250;
+          this.writeSaveData();
+          this.startDialogue([
+            {
+              speaker: 'gaster',
+              portrait: 'gaster',
+              voice: 'gaster',
+              text: '* "VERY... VERY INTERESTING. YOU FOUND MY SILENT CORRIDOR OUTSIDE THE LOOP."'
+            },
+            {
+              speaker: 'gaster',
+              portrait: 'gaster',
+              voice: 'gaster',
+              text: '* "TAKE THIS VOID KEY. REACH PHASE FOUR IN STORY MODE—AND WITNESS WHAT WAITS IN PHASE FIVE."'
+            },
+            '* Obtained [VOID KEY], +250G, and unlocked the [Void Mono] SOUL Aura!'
+          ]);
+        } else {
+          this.startDialogue([
+            {
+              speaker: 'gaster',
+              portrait: 'gaster',
+              voice: 'gaster',
+              text: '* "THE VOID KEY RESONATES IN YOUR POCKET. WALK BACK TO THE CORRIDOR... I WILL BE WATCHING."'
+            }
+          ]);
+        }
         return;
       }
     }
@@ -699,6 +999,10 @@ export class OverworldEngine {
 
     if (this.roomId === 'antechamber') {
       this._renderAntechamber(ctx);
+    } else if (this.roomId === 'echo_sanctum') {
+      this._renderEchoSanctum(ctx);
+    } else if (this.roomId === 'void_vault') {
+      this._renderVoidVault(ctx);
     } else if (this.roomId === 'corridor') {
       this._renderCorridor(ctx, camX);
     } else {
@@ -751,6 +1055,12 @@ export class OverworldEngine {
     ctx.fillStyle = '#ffdf70';
     ctx.fillRect(622, 230, 10, 120);
 
+    // West Echo Sanctum Archway
+    ctx.fillStyle = '#0b0912';
+    ctx.fillRect(10, 210, 24, 150);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(10, 234, 8, 114);
+
     // Ancient Plaque (west wall)
     ctx.fillStyle = '#473a66';
     ctx.fillRect(64, 188, 64, 42);
@@ -782,6 +1092,93 @@ export class OverworldEngine {
     ctx.fillStyle = '#b4a8d4';
     ctx.font = '12px "Press Start 2P", monospace';
     ctx.fillText('TWILIGHT ANTECHAMBER', 24, 33);
+  }
+
+  _renderEchoSanctum(ctx) {
+    // Waterfall-inspired Echo Sanctum
+    ctx.fillStyle = '#040914';
+    ctx.fillRect(0, 0, 640, 480);
+
+    // Glowing cyan water pool reflections above & stone walkway below
+    ctx.fillStyle = '#0b1d36';
+    ctx.fillRect(28, 72, 584, 226);
+    ctx.fillStyle = '#132f54';
+    for (let wx = 40; wx < 590; wx += 48) {
+      const shimmer = Math.round(Math.sin(this.time * 2.2 + wx) * 6);
+      ctx.fillRect(wx + shimmer, 120 + (wx % 3) * 38, 28, 4);
+    }
+
+    // Sanctuary stone walkway
+    ctx.fillStyle = '#1a2744';
+    ctx.fillRect(28, 298, 584, 8);
+    for (let x = 28; x < 612; x += 32) {
+      for (let row = 0; row < 5; row++) {
+        ctx.fillStyle = ((x / 32 + row) % 2 === 0) ? '#152036' : '#0f1829';
+        ctx.fillRect(x, 306 + row * 32, 32, 32);
+      }
+    }
+
+    // East doorway back to Twilight Antechamber
+    ctx.fillStyle = '#060912';
+    ctx.fillRect(584, 210, 46, 150);
+    ctx.fillStyle = '#a78bfa';
+    ctx.fillRect(622, 232, 10, 118);
+
+    // Secret Grey Door on West Wall & Echo Flowers & Shrine
+    drawVoidDoor(ctx, 72, 326, this.time, this.hasVoidKey);
+    drawEchoFlower(ctx, 210, 328, this.time, Math.hypot(this.player.x - 210, this.player.y - 328) < 64);
+    drawEchoFlower(ctx, 320, 324, this.time, Math.hypot(this.player.x - 320, this.player.y - 324) < 64);
+    drawEchoFlower(ctx, 435, 328, this.time, Math.hypot(this.player.x - 435, this.player.y - 328) < 64);
+
+    if (this.player.y < 344) {
+      drawFriskOverworld(ctx, this.player.x, this.player.y, this.player.dir, this.player.walkFrame);
+      drawSoulShrine(ctx, 525, 344, this.time);
+    } else {
+      drawSoulShrine(ctx, 525, 344, this.time);
+      drawFriskOverworld(ctx, this.player.x, this.player.y, this.player.dir, this.player.walkFrame);
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.68)';
+    ctx.fillRect(14, 14, 290, 28);
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillText('ECHO FLOWER SANCTUM', 24, 33);
+  }
+
+  _renderVoidVault(ctx) {
+    // Stark monochrome-violet Mystery Room (Room 269 vibe)
+    ctx.fillStyle = '#030306';
+    ctx.fillRect(0, 0, 640, 480);
+
+    // Subtle shifting monochrome grid floor
+    for (let x = 60; x < 610; x += 32) {
+      for (let row = 0; row < 5; row++) {
+        ctx.fillStyle = ((x / 32 + row) % 2 === 0) ? '#141320' : '#090910';
+        ctx.fillRect(x, 304 + row * 32, 32, 32);
+      }
+    }
+
+    // East doorway back to Echo Sanctum
+    ctx.fillStyle = '#090910';
+    ctx.fillRect(584, 210, 46, 150);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(622, 232, 10, 118);
+
+    // W.D. Gaster Fragment awaiting near west center
+    drawGasterOverlay(ctx, 260, 354, {
+      time: this.time,
+      alpha: 0.94,
+      activeHands: true,
+      handGlow: this.hasVoidKey
+    });
+
+    drawFriskOverworld(ctx, this.player.x, this.player.y, this.player.dir, this.player.walkFrame);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(14, 14, 275, 28);
+    ctx.fillStyle = '#e879f9';
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillText('ENTRY SEVENTEEN // VOID', 24, 33);
   }
 
   _renderCorridor(ctx, camX) {
@@ -875,8 +1272,26 @@ export class OverworldEngine {
         hint = '[Z] Relic Armory';
       } else if (Math.hypot(this.player.x - 96, this.player.y - 320) < 56) {
         hint = '[Z] Inspect Plaque';
+      } else if (this.player.x < 70) {
+        hint = 'West <- Echo Sanctum';
       } else if (this.player.x > 520) {
         hint = 'East -> Judgment Hall';
+      }
+    } else if (this.roomId === 'echo_sanctum') {
+      if (Math.hypot(this.player.x - 72, this.player.y - 326) < 62) {
+        hint = '[Z] Mysterious Grey Door';
+      } else if (Math.hypot(this.player.x - 210, this.player.y - 328) < 52 || Math.hypot(this.player.x - 320, this.player.y - 324) < 52 || Math.hypot(this.player.x - 435, this.player.y - 328) < 52) {
+        hint = '[Z] Listen to Echo Flower';
+      } else if (Math.hypot(this.player.x - 525, this.player.y - 344) < 58) {
+        hint = '[Z] Shrine Forge & Skins';
+      } else if (this.player.x > 540) {
+        hint = 'East -> Antechamber';
+      }
+    } else if (this.roomId === 'void_vault') {
+      if (Math.hypot(this.player.x - 260, this.player.y - 340) < 92) {
+        hint = this.hasVoidKey ? '[Z] Speak to Mystery Man' : '[Z] Claim VOID KEY';
+      } else if (this.player.x > 520) {
+        hint = 'East -> Echo Sanctum';
       }
     } else if (this.roomId === 'corridor') {
       if (!this.battleCleared && this.player.x < 450) {

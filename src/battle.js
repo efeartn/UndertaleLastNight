@@ -5,11 +5,16 @@ import { ATTACK_META, ATTACK_NAMES, AttackRunner } from './attacks.js';
 import { ARMORS, DEFAULT_INVENTORY, WEAPONS } from './overworld.js';
 export { ARMORS, WEAPONS };
 import {
+  SOUL_SKINS,
+  drawBattleBackdrop,
   drawBattleButton,
+  drawGasterBlaster,
   drawGasterOverlay,
+  drawGasterUnbound,
   drawSansBattle,
   drawSoul,
-  drawSoulShard
+  drawSoulShard,
+  drawSoulTrail
 } from './sprites.js';
 
 const BUTTON_LABELS = ['FIGHT', 'ACT', 'ITEM', 'MERCY'];
@@ -18,6 +23,7 @@ const BUTTON_Y = 428;
 
 const ACHIEVEMENTS_STORAGE_KEY = 'undertale_last_night_achievements_v1';
 const ENDLESS_BEST_STORAGE_KEY = 'undertale_last_night_endless_best_v1';
+const ENDLESS_BOARD_STORAGE_KEY = 'undertale_last_night_endless_board_v1';
 const NOHIT_STORAGE_KEY = 'undertale_last_night_nohit_v1';
 const RESETS_STORAGE_KEY = 'undertale_last_night_resets_v1';
 
@@ -29,7 +35,11 @@ export const ACHIEVEMENT_DEFS = [
   { id: 'Phase 1 Cleared', title: 'Phase 1 Cleared', desc: 'Push past Sans\'s opening barrage into Phase 2.' },
   { id: 'Gaster Challenger', title: 'Gaster Challenger', desc: 'Witness W.D. Gaster\'s interference in the Void.' },
   { id: 'Dawn Savior', title: 'Dawn Savior', desc: 'Reach the sunrise ending in Story or Boss Rush.' },
-  { id: 'Master of the Night', title: 'Master of the Night', desc: 'No-Hit 5 unique attacks or clear Full Boss Rush.' }
+  { id: 'Master of the Night', title: 'Master of the Night', desc: 'No-Hit 5 unique attacks or clear Full Boss Rush.' },
+  { id: 'Web Dancer', title: 'Web Dancer', desc: 'Clear any Purple SOUL 3-rail attack without taking a hit.' },
+  { id: 'Style Legend', title: 'Style Legend', desc: 'Reach Style Rank S or SS during active combat.' },
+  { id: 'Void Sovereign', title: 'Void Sovereign', desc: 'Defeat Secret Phase 5 Boss W.D. Gaster Unbound.' },
+  { id: 'Ironman Legend', title: 'Ironman Legend', desc: 'Survive 3 turns or clear an attack with 1-HP Ironman active.' }
 ];
 
 const FLAVOR_TEXTS = {
@@ -54,6 +64,11 @@ const FLAVOR_TEXTS = {
     '* Reality fractures behind Sans as the Void watches.',
     '* Hands from beyond time steady the bone storm.',
     '* One last trial stands before the true sunrise.'
+  ],
+  5: [
+    '* W.D. Gaster Unbound looms across shattered reality.',
+    '* Entry Seventeen echoes louder than your heartbeat.',
+    '* Every timeline converges inside this single box.'
   ]
 };
 
@@ -73,7 +88,11 @@ const SANS_SPEECH_BY_TURN = [
   "you hear that static too? looks like the void's lending me a hand.",
   "careful now. the doctor's old blueprints don't play by normal corridor rules.",
   "the corridor's splitting in two... red, green, yellow, blue—show me your determination!",
-  "huff... alright... survive this final singularity, and morning is all yours... *yawn*..."
+  "huff... alright... survive this final singularity, and morning is all yours... *yawn*...",
+  "...DARKER. YET DARKER. THANK YOU FOR OPENING THE VAULT.",
+  "...MY ARCANUM DOES NOT RESPECT YOUR TIMELINE BORDERS.",
+  "...YELLOW, BLUE, PURPLE... WATCH EVERY STRING SNAP AT ONCE.",
+  "...FINAL RECORDING. SHOW ME DETERMINATION BEYOND THIS PAGE."
 ];
 
 export class BattleEngine {
@@ -89,8 +108,17 @@ export class BattleEngine {
     this.unlockedAchievements = this._loadAchievements();
     this.achievementQueue = [];
     this.endlessBestWave = this._loadEndlessBest();
+    this.endlessLeaderboard = this._loadEndlessLeaderboard();
     this.noHitAttacks = this._loadNoHitAttacks();
     this.resetCount = this._loadResetCount();
+    this.modifiers = {
+      ironman: false,
+      hyperSpeed: false,
+      invertedGravity: false,
+      mirrorBox: false
+    };
+    this.soulSkin = 'classic';
+    this.hasVoidKey = false;
 
     this.resetBattle({ skipResetCount: true });
   }
@@ -175,6 +203,34 @@ export class BattleEngine {
     }
   }
 
+  _loadEndlessLeaderboard() {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(ENDLESS_BOARD_STORAGE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.slice(0, 5) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  recordEndlessRun(wave, rank = 'C') {
+    if (!Number.isFinite(wave) || wave < 1) return;
+    this.endlessLeaderboard = [
+      ...this.endlessLeaderboard,
+      { wave, rank, date: new Date().toLocaleDateString() }
+    ]
+      .sort((a, b) => b.wave - a.wave)
+      .slice(0, 5);
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(ENDLESS_BOARD_STORAGE_KEY, JSON.stringify(this.endlessLeaderboard));
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }
+
   unlockAchievement(title) {
     if (!title || this.unlockedAchievements.has(title)) return;
     this.unlockedAchievements.add(title);
@@ -188,6 +244,7 @@ export class BattleEngine {
   }
 
   _phaseForTurnIndex(idx) {
+    if (idx >= 16) return 5;
     if (idx >= 12) return 4;
     if (idx >= 9) return 3;
     if (idx >= 5) return 2;
@@ -196,7 +253,7 @@ export class BattleEngine {
 
   _pickNextEndlessAttackIndex(firstWave = false) {
     if (!this.endlessBag || this.endlessBag.length === 0) {
-      const pool = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+      const pool = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
       for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -218,7 +275,7 @@ export class BattleEngine {
   }
 
   resetBattle(options = {}) {
-    const turnByPhase = { 1: 0, 2: 5, 3: 9, 4: 12 };
+    const turnByPhase = { 1: 0, 2: 5, 3: 9, 4: 12, 5: 16 };
 
     if (!options.skipResetCount) {
       this.resetCount = (this.resetCount || 0) + 1;
@@ -227,6 +284,16 @@ export class BattleEngine {
     this.usedMouseThisBattle = false;
     this.metaCalloutsUsed = new Set();
     this.buttonOrder = [0, 1, 2, 3];
+
+    if (options.modifiers) {
+      this.modifiers = { ...this.modifiers, ...options.modifiers };
+    }
+    if (options.soulSkin && SOUL_SKINS[options.soulSkin]) {
+      this.soulSkin = options.soulSkin;
+    }
+    if (typeof options.hasVoidKey === 'boolean') {
+      this.hasVoidKey = options.hasVoidKey;
+    }
 
     this.practiceAttackIndex = Number.isInteger(options.practiceAttackIndex)
       ? Math.max(0, Math.min(ATTACK_NAMES.length - 1, options.practiceAttackIndex))
@@ -267,16 +334,29 @@ export class BattleEngine {
     this.turnHitsTaken = 0;
     this.turnsTaken = 0;
 
+    // Style Rank & Combat Juice state
+    this.styleScore = 0;
+    this.styleRank = 'C';
+    this.styleCombo = 0;
+    this.hitstopTimer = 0;
+    this.slowMoTimer = 0;
+    this.chromaticTimer = 0;
+    this.particles = [];
+    this.soulTrail = [];
+    this.slashArcs = [];
+
     // Equipment
     this.weaponName = options.weapon && WEAPONS[options.weapon] ? options.weapon : 'Real Knife';
     this.armorName = options.armor && ARMORS[options.armor] ? options.armor : 'The Locket';
 
     // Player stats
+    const ironmanOn = Boolean(this.modifiers?.ironman);
+    if (ironmanOn) this.assistMode = false;
     this.stats = {
       name: options.name || 'FRISK',
       lv: 19,
-      hp: options.hp ?? 92,
-      maxHp: options.maxHp ?? 92,
+      hp: ironmanOn ? 1 : (options.hp ?? 92),
+      maxHp: ironmanOn ? 1 : (options.maxHp ?? 92),
       kr: 0
     };
     this.inventory = options.inventory
@@ -332,7 +412,7 @@ export class BattleEngine {
       targetH: 150
     };
 
-    // SOUL Physics (red | blue | green | yellow)
+    // SOUL Physics (red | blue | green | yellow | purple)
     this.soul = {
       x: 320,
       y: 315,
@@ -341,6 +421,11 @@ export class BattleEngine {
       mode: 'red',
       gravity: 'down',
       shieldDir: 'up',
+      webLine: 1,
+      dashTimer: 0,
+      dashCooldown: 0,
+      dashDirX: 0,
+      dashDirY: 0,
       shotCooldown: 0,
       chargeTimer: 0,
       grazeFlashTimer: 0,
@@ -412,8 +497,39 @@ export class BattleEngine {
     this.phaseBannerText = '';
 
     // Track BGM
-    const bgmMap = { 1: 'phase1', 2: 'phase2', 3: 'phase3', 4: 'phase4' };
+    const bgmMap = { 1: 'phase1', 2: 'phase2', 3: 'phase3', 4: 'phase4', 5: 'phase5' };
+    audio.setTempoMult?.(this.modifiers?.hyperSpeed ? 1.16 : 1.0);
     audio.playBGM(bgmMap[this.phase] || 'phase1');
+  }
+
+  _spawnParticles(x, y, color = '#ffffff', count = 8, speed = 110) {
+    for (let i = 0; i < count; i++) {
+      const a = (i / Math.max(1, count)) * Math.PI * 2 + Math.random() * 0.5;
+      const spd = speed * (0.45 + Math.random() * 0.85);
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd,
+        size: 2 + (i % 3) * 2,
+        color,
+        life: 0.35 + Math.random() * 0.25,
+        maxLife: 0.6
+      });
+    }
+  }
+
+  _refreshStyleRank() {
+    const prev = this.styleRank;
+    if (this.styleScore >= 1200) this.styleRank = 'SS';
+    else if (this.styleScore >= 720) this.styleRank = 'S';
+    else if (this.styleScore >= 420) this.styleRank = 'A';
+    else if (this.styleScore >= 180) this.styleRank = 'B';
+    else this.styleRank = 'C';
+    if (this.styleRank !== prev && (this.styleRank === 'S' || this.styleRank === 'SS')) {
+      this.unlockAchievement('Style Legend');
+      audio.rankUp?.();
+    }
   }
 
   addScreenShake(amount) {
@@ -443,6 +559,7 @@ export class BattleEngine {
     const prevMode = this.soul.mode;
     const prevGrav = this.soul.gravity;
     this.soul.mode = mode;
+    this.runner.currentSoulMode = mode;
     if (mode !== 'yellow') {
       this.soul.chargeTimer = 0;
     }
@@ -451,7 +568,8 @@ export class BattleEngine {
         red: '#ff1e1e',
         blue: '#2ce8f5',
         green: '#4ade80',
-        yellow: '#ffef3f'
+        yellow: '#ffef3f',
+        purple: '#d946ef'
       };
       this.soulTransitionRing = {
         timer: 0.45,
@@ -460,10 +578,22 @@ export class BattleEngine {
       };
     }
     if (mode === 'blue') {
-      this.soul.gravity = gravity;
-      if (prevMode !== 'blue' || prevGrav !== gravity) {
+      let g = gravity;
+      if (this.modifiers?.invertedGravity) {
+        const flip = { down: 'up', up: 'down', left: 'right', right: 'left' };
+        g = flip[g] || g;
+      }
+      this.soul.gravity = g;
+      if (prevMode !== 'blue' || prevGrav !== g) {
         this.soul.grounded = false;
       }
+    } else if (mode === 'purple') {
+      this.soul.vx = 0;
+      this.soul.vy = 0;
+      this.soul.grounded = false;
+      this.soul.webLine = 1;
+      const rails = this.runner.getWebLines(this.box);
+      this.soul.y = rails[1] ?? (this.box.y + this.box.h * 0.5);
     } else {
       this.soul.vx = 0;
       this.soul.vy = 0;
@@ -475,20 +605,26 @@ export class BattleEngine {
   }
 
   slamSoul(dir) {
+    let effDir = dir;
+    if (this.modifiers?.invertedGravity) {
+      const flip = { down: 'up', up: 'down', left: 'right', right: 'left' };
+      effDir = flip[dir] || dir;
+    }
     this.soul.mode = 'blue';
-    this.soul.gravity = dir;
+    this.runner.currentSoulMode = 'blue';
+    this.soul.gravity = effDir;
     this.soul.grounded = false;
     const slamSpeed = 620;
-    if (dir === 'down') {
+    if (effDir === 'down') {
       this.soul.vy = slamSpeed;
       this.sans.pose = 'slamDown';
-    } else if (dir === 'up') {
+    } else if (effDir === 'up') {
       this.soul.vy = -slamSpeed;
       this.sans.pose = 'slamUp';
-    } else if (dir === 'left') {
+    } else if (effDir === 'left') {
       this.soul.vx = -slamSpeed;
       this.sans.pose = 'slamLeft';
-    } else if (dir === 'right') {
+    } else if (effDir === 'right') {
       this.soul.vx = slamSpeed;
       this.sans.pose = 'slamRight';
     }
@@ -523,13 +659,31 @@ export class BattleEngine {
   }
 
   update(dt, input) {
+    if (this.hitstopTimer > 0) {
+      this.hitstopTimer = Math.max(0, this.hitstopTimer - dt);
+      return;
+    }
+    const rawDt = dt;
+    if (this.slowMoTimer > 0) {
+      this.slowMoTimer = Math.max(0, this.slowMoTimer - rawDt);
+      dt = dt * 0.58;
+    }
     this.time += dt;
 
+    if (this.chromaticTimer > 0) {
+      this.chromaticTimer = Math.max(0, this.chromaticTimer - rawDt);
+    }
     if (this.screenShake > 0) {
-      this.screenShake = Math.max(0, this.screenShake - dt * 28);
+      this.screenShake = Math.max(0, this.screenShake - rawDt * 28);
     }
     if (this.invulnTimer > 0) {
       this.invulnTimer = Math.max(0, this.invulnTimer - dt);
+    }
+    if (this.soul.dashTimer > 0) {
+      this.soul.dashTimer = Math.max(0, this.soul.dashTimer - dt);
+    }
+    if (this.soul.dashCooldown > 0) {
+      this.soul.dashCooldown = Math.max(0, this.soul.dashCooldown - dt);
     }
     if (this.soul.grazeFlashTimer > 0) {
       this.soul.grazeFlashTimer = Math.max(0, this.soul.grazeFlashTimer - dt);
@@ -538,7 +692,22 @@ export class BattleEngine {
       this.soul.shotCooldown = Math.max(0, this.soul.shotCooldown - dt);
     }
     if (this.phaseBannerTimer > 0) {
-      this.phaseBannerTimer = Math.max(0, this.phaseBannerTimer - dt);
+      this.phaseBannerTimer = Math.max(0, this.phaseBannerTimer - rawDt);
+    }
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx * rawDt;
+      p.y += p.vy * rawDt;
+      p.life -= rawDt;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+    for (let i = this.soulTrail.length - 1; i >= 0; i--) {
+      this.soulTrail[i].life -= rawDt;
+      if (this.soulTrail[i].life <= 0) this.soulTrail.splice(i, 1);
+    }
+    for (let i = this.slashArcs.length - 1; i >= 0; i--) {
+      this.slashArcs[i].timer -= rawDt;
+      if (this.slashArcs[i].timer <= 0) this.slashArcs.splice(i, 1);
     }
     if (this.soulTransitionRing) {
       this.soulTransitionRing.timer -= dt;
@@ -791,6 +960,13 @@ export class BattleEngine {
     this.fightBar.slashTimer = 0.65;
     if (swung) {
       audio.slash();
+      this.slashArcs.push({
+        x: this.sans.x,
+        y: this.sans.y - 60,
+        timer: 0.34,
+        maxTimer: 0.34,
+        color: this.phase >= 5 ? '#e879f9' : '#2ce8f5'
+      });
       if (this.sans.sleeping) {
         if (
           this.phase < 4 &&
@@ -812,8 +988,31 @@ export class BattleEngine {
           this.fightBar.slashTimer = 0.95;
           this.addPopup(this.sans.x, this.sans.y - 76, 'GASTER INTERVENED!', '#c084fc');
           audio.gasterSpeak();
+        } else if (
+          this.phase === 4 &&
+          this.hasVoidKey &&
+          !this.bossRushMode &&
+          !this.endlessMode &&
+          this.practiceAttackIndex === null
+        ) {
+          // Secret Void Key shatters Phase 4's ending -> Phase 5 Gaster Unbound!
+          this.sans.pose = 'damaged';
+          this.sans.expression = 'cracked';
+          this.sans.hurtShake = 18;
+          this.sans.flashAlpha = 0.95;
+          this.sans.sleeping = false;
+          this.sans.defeated = false;
+          this.voidUnboundPending = true;
+          this.fightBar.damageText = 'VOID SHATTERED';
+          this.fightBar.showMiss = true;
+          this.fightBar.damageTimer = 1.3;
+          this.fightBar.slashTimer = 1.05;
+          this.hitstopTimer = 0.08;
+          this.chromaticTimer = 0.35;
+          this._spawnParticles(this.sans.x, this.sans.y - 50, '#e879f9', 16, 160);
+          audio.gasterUnboundRoar?.();
         } else {
-          // Final Phase 4 Climax fatal hit!
+          // Final Climax fatal hit!
           this.sans.pose = 'damaged';
           this.sans.expression = 'cracked';
           this.sans.hurtShake = 18;
@@ -822,6 +1021,8 @@ export class BattleEngine {
           this.fightBar.damageText = '9999999';
           this.fightBar.showMiss = true;
           this.fightBar.damageTimer = 1.4;
+          this.hitstopTimer = 0.08;
+          this._spawnParticles(this.sans.x, this.sans.y - 50, '#ff4c4c', 18, 175);
           audio.hit();
         }
       } else {
@@ -842,7 +1043,16 @@ export class BattleEngine {
   _updateFightSlash(dt) {
     this.fightBar.slashTimer -= dt;
     if (this.fightBar.slashTimer <= 0) {
-      if (this.voidInterventionPending) {
+      if (this.voidUnboundPending) {
+        this.voidUnboundPending = false;
+        this.turnIndex = 16;
+        this._pendingTurnAdvance = 1;
+        this._syncPhaseFromTurnIndex();
+        this._showSansSpeech(
+          '* ...THE VOID KEY SHATTERED THE SEAL. WITNESS ENTRY SEVENTEEN UNBOUND.',
+          () => this._startDefendAttack()
+        );
+      } else if (this.voidInterventionPending) {
         this.voidInterventionPending = false;
         this.turnIndex = 12;
         this._pendingTurnAdvance = 1;
@@ -852,7 +1062,7 @@ export class BattleEngine {
           () => this._startDefendAttack()
         );
       } else if (this.sans.defeated) {
-        this._finishVictory('strike');
+        this._finishVictory(this.phase >= 5 ? 'void_unbound' : 'strike');
       } else {
         this._advanceTurnAfterAction(1);
       }
@@ -1125,16 +1335,17 @@ export class BattleEngine {
       if (prevPhase === 1 && this.phase >= 2) {
         this.unlockAchievement('Phase 1 Cleared');
       }
-      if (this.phase === 4) {
+      if (this.phase >= 4) {
         this.unlockAchievement('Gaster Challenger');
       }
       audio.phaseShift();
-      const bgmMap = { 1: 'phase1', 2: 'phase2', 3: 'phase3', 4: 'phase4' };
-      audio.playBGM(bgmMap[this.phase] || 'phase3');
+      const bgmMap = { 1: 'phase1', 2: 'phase2', 3: 'phase3', 4: 'phase4', 5: 'phase5' };
+      audio.transitionToBGM?.(bgmMap[this.phase] || 'phase3') || audio.playBGM(bgmMap[this.phase] || 'phase3');
       const bannerByPhase = {
         2: 'PHASE 2: SECOND WIND',
         3: 'PHASE 3: UNTIL DAWN',
-        4: 'PHASE 4: VOID FRACTURE'
+        4: 'PHASE 4: VOID FRACTURE',
+        5: 'PHASE 5: GASTER UNBOUND'
       };
       this.phaseBannerText = bannerByPhase[this.phase] || 'PHASE SHIFT';
       this.phaseBannerTimer = 2.6;
@@ -1252,8 +1463,12 @@ export class BattleEngine {
     const boxCY = 308;
 
     const baseMult = this.tauntSpeedBoost ? 1.15 : 1.0;
+    const modSpeedMult = this.modifiers?.hyperSpeed ? 1.35 : 1.0;
     const endlessMult = this.endlessMode ? Math.min(1.42, 1.0 + (this.endlessWave - 1) * 0.03) : 1.0;
-    const speedMult = baseMult * endlessMult * (this.customSpeedMult || 1.0);
+    const speedMult = baseMult * modSpeedMult * endlessMult * (this.customSpeedMult || 1.0);
+    audio.setTempoMult?.(
+      (this.modifiers?.hyperSpeed ? 1.16 : 1.0) * (this.stats.hp <= 24 ? 1.07 : 1.0)
+    );
 
     this.runner.start(attackId, {
       phase: attackPhase,
@@ -1264,6 +1479,9 @@ export class BattleEngine {
     });
     this.tauntSpeedBoost = false;
     this.spawnGreenBonus = false;
+    this.soul.dashTimer = 0;
+    this.soul.dashCooldown = 0;
+    this.soulTrail = [];
 
     this.box.targetW = this.runner.targetBoxW;
     this.box.targetH = this.runner.targetBoxH;
@@ -1312,15 +1530,33 @@ export class BattleEngine {
     }
 
     if (grazed > 0) {
-      this.tp = Math.min(100, this.tp + 4 * grazed);
+      const weaponSpec = WEAPONS[this.weaponName] || WEAPONS['Real Knife'];
+      const tpMult = weaponSpec.tpMult || 1.0;
+      const isCloseCall = this.soul.dashTimer > 0 || grazed >= 2;
+      const gainTp = Math.round((isCloseCall ? 8 : 4) * grazed * tpMult);
+      this.tp = Math.min(100, this.tp + gainTp);
       this.soul.grazeFlashTimer = 0.14;
+      this.styleCombo += grazed;
+      this.styleScore += (isCloseCall ? 65 : 35) * grazed;
+      this._refreshStyleRank();
+      if (isCloseCall) {
+        this.slowMoTimer = 0.14;
+        this.addPopup(this.soul.x, this.soul.y - 20, 'CLOSE CALL!', '#2ce8f5');
+      }
+      this._spawnParticles(this.soul.x, this.soul.y, '#70f8ff', 4, 70);
       this.unlockAchievement('First Graze');
     }
 
     if (blocked > 0) {
-      this.tp = Math.min(100, this.tp + 6 * blocked);
+      const weaponSpec = WEAPONS[this.weaponName] || WEAPONS['Real Knife'];
+      const gainTp = Math.round(6 * blocked * (weaponSpec.tpMult || 1.0));
+      this.tp = Math.min(100, this.tp + gainTp);
       this.totalBlocks += blocked;
-      this.addPopup(this.soul.x, this.soul.y - 18, '+6% TP', '#4ade80');
+      this.styleCombo += blocked;
+      this.styleScore += 45 * blocked;
+      this._refreshStyleRank();
+      this._spawnParticles(this.soul.x, this.soul.y, '#4ade80', 5, 85);
+      this.addPopup(this.soul.x, this.soul.y - 18, `+${gainTp}% TP`, '#4ade80');
       if (this.totalBlocks >= 4) {
         this.unlockAchievement('Shield Master');
       }
@@ -1338,7 +1574,7 @@ export class BattleEngine {
     if (this.runner.finished) {
       this.krShieldActive = false;
 
-      // Stained Apron end-of-defend-turn heal
+      // Stained Apron / Heart Locket+ end-of-defend-turn heal
       const armorSpec = ARMORS[this.armorName] || ARMORS['The Locket'];
       if (armorSpec.endTurnHeal > 0 && this.stats.hp < this.stats.maxHp) {
         this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + armorSpec.endTurnHeal);
@@ -1347,7 +1583,16 @@ export class BattleEngine {
       }
 
       if (this.turnHitsTaken === 0) {
+        this.styleScore += 180;
+        this._refreshStyleRank();
         this.unlockAchievement('Untouchable Turn');
+        if (this.modifiers?.ironman) {
+          this.unlockAchievement('Ironman Legend');
+        }
+        const meta = ATTACK_META[this.activeAttackIdx];
+        if (meta && String(meta.soulMode).includes('purple')) {
+          this.unlockAchievement('Web Dancer');
+        }
         if (Number.isInteger(this.activeAttackIdx)) {
           this.noHitAttacks.add(this.activeAttackIdx);
           this._saveNoHitAttacks();
@@ -1408,6 +1653,11 @@ export class BattleEngine {
           this.enterClimaxSleep();
           return;
         }
+        if (prevIdx === 15 && !this.hasVoidKey) {
+          this._pendingTurnAdvance = 0;
+          this.enterClimaxSleep();
+          return;
+        }
         this.turnIndex = Math.min(ATTACK_NAMES.length - 1, this.turnIndex + this._pendingTurnAdvance);
         this._pendingTurnAdvance = 0;
         if (prevIdx <= 4 && this.turnIndex >= 5) {
@@ -1420,13 +1670,62 @@ export class BattleEngine {
   }
 
   _updateSoulPhysics(dt, input) {
-    const left = input.isDown('ArrowLeft') || input.isDown('KeyA');
-    const right = input.isDown('ArrowRight') || input.isDown('KeyD');
+    const rawLeft = input.isDown('ArrowLeft') || input.isDown('KeyA');
+    const rawRight = input.isDown('ArrowRight') || input.isDown('KeyD');
+    const left = this.modifiers?.mirrorBox ? rawRight : rawLeft;
+    const right = this.modifiers?.mirrorBox ? rawLeft : rawRight;
     const up = input.isDown('ArrowUp') || input.isDown('KeyW');
     const down = input.isDown('ArrowDown') || input.isDown('KeyS');
 
     const moveX = (right ? 1 : 0) - (left ? 1 : 0);
     const moveY = (down ? 1 : 0) - (up ? 1 : 0);
+
+    // Record Soul Afterimage Trail during Dash or intense speeds
+    if (this.soul.dashTimer > 0 || (this.phase >= 4 && this.soul.inputMoving && Math.floor(this.time * 30) % 2 === 0)) {
+      this.soulTrail.push({
+        x: this.soul.x,
+        y: this.soul.y,
+        mode: this.soul.mode,
+        gravity: this.soul.gravity,
+        dashing: this.soul.dashTimer > 0,
+        life: this.soul.dashTimer > 0 ? 0.24 : 0.14,
+        maxLife: 0.24
+      });
+      if (this.soulTrail.length > 14) this.soulTrail.shift();
+    }
+
+    // Trigger SOUL Dash on X / Shift (gives brief burst + i-frames)
+    const dashPressed =
+      input.justPressed('KeyX') || input.justPressed('ShiftLeft') || input.justPressed('ShiftRight');
+    if (dashPressed && this.soul.mode !== 'green' && this.soul.dashCooldown <= 0) {
+      const weaponSpec = WEAPONS[this.weaponName] || WEAPONS['Real Knife'];
+      const armorSpec = ARMORS[this.armorName] || ARMORS['The Locket'];
+      let dx = moveX;
+      let dy = moveY;
+      if (this.soul.mode === 'purple') dy = 0;
+      if (dx === 0 && dy === 0) {
+        if (this.soul.mode === 'blue') dy = this.soul.gravity === 'up' ? 1 : -1;
+        else dx = 1;
+      }
+      const len = Math.hypot(dx, dy) || 1;
+      this.soul.dashDirX = dx / len;
+      this.soul.dashDirY = dy / len;
+      this.soul.dashTimer = 0.15;
+      this.soul.dashCooldown = 0.95 * (weaponSpec.dashCooldownMult || 1.0);
+      this.invulnTimer = Math.max(this.invulnTimer, 0.14 + (armorSpec.dashInvulnBonus || 0));
+      audio.dash?.();
+      this._spawnParticles(this.soul.x, this.soul.y, '#2ce8f5', 7, 130);
+    }
+
+    if (this.soul.dashTimer > 0) {
+      const dashSpd = 435;
+      this.soul.x += this.soul.dashDirX * dashSpd * dt;
+      if (this.soul.mode !== 'purple') {
+        this.soul.y += this.soul.dashDirY * dashSpd * dt;
+      }
+      this.soul.inputMoving = true;
+      return;
+    }
 
     if (this.soul.mode === 'green') {
       // GREEN SOUL: Locked to box center; directional input rotates shield immediately
@@ -1453,6 +1752,27 @@ export class BattleEngine {
       this.soul.inputMoving = false;
       this.soul.x = this.box.x + this.box.w / 2;
       this.soul.y = this.box.y + this.box.h / 2;
+    } else if (this.soul.mode === 'purple') {
+      // PURPLE SOUL: 3-line horizontal web dodging!
+      const rails = this.runner.getWebLines(this.box);
+      if (input.justPressed('ArrowUp') || input.justPressed('KeyW')) {
+        if (this.soul.webLine > 0) {
+          this.soul.webLine -= 1;
+          audio.webMove?.();
+        }
+      } else if (input.justPressed('ArrowDown') || input.justPressed('KeyS')) {
+        if (this.soul.webLine < 2) {
+          this.soul.webLine += 1;
+          audio.webMove?.();
+        }
+      }
+      const targetY = rails[this.soul.webLine] ?? (this.box.y + this.box.h * 0.5);
+      const railLerp = Math.min(1, dt * 28);
+      this.soul.y += (targetY - this.soul.y) * railLerp;
+      this.soul.vx = moveX * 190;
+      this.soul.vy = 0;
+      this.soul.x += this.soul.vx * dt;
+      this.soul.inputMoving = moveX !== 0;
     } else if (this.soul.mode === 'red' || this.soul.mode === 'yellow') {
       const spd = this.soul.speed;
       this.soul.vx = moveX * spd;
@@ -1462,28 +1782,34 @@ export class BattleEngine {
       this.soul.y += this.soul.vy * dt;
 
       if (this.soul.mode === 'yellow') {
+        const weaponSpec = WEAPONS[this.weaponName] || WEAPONS['Real Knife'];
+        const fastGun = Boolean(weaponSpec.yellowFastCharge);
+        const cdTap = fastGun ? 0.12 : 0.16;
+        const chargeNeed = fastGun ? 0.28 : 0.38;
+        const autoReleaseAt = fastGun ? 0.54 : 0.68;
+
         const fireJustPressed = input.justPressed('KeyZ') || input.justPressed('Enter');
         const fireHeld = input.isDown('KeyZ') || input.isDown('Enter');
         if (fireJustPressed) {
           if (this.soul.shotCooldown <= 0) {
             this.runner.spawnPlayerShot(this.soul.x, this.soul.y - 10, false);
-            this.soul.shotCooldown = 0.16;
+            this.soul.shotCooldown = cdTap;
             this.yellowShotsFired += 1;
           }
           this.soul.chargeTimer = 0.001;
         } else if (fireHeld) {
           this.soul.chargeTimer += dt;
-          if (this.soul.chargeTimer >= 0.68 && this.soul.shotCooldown <= 0) {
+          if (this.soul.chargeTimer >= autoReleaseAt && this.soul.shotCooldown <= 0) {
             this.runner.spawnPlayerShot(this.soul.x, this.soul.y - 12, true);
-            this.soul.shotCooldown = 0.28;
+            this.soul.shotCooldown = 0.24;
             this.soul.chargeTimer = 0;
             this.yellowShotsFired += 1;
             this.addPopup(this.soul.x, this.soul.y - 18, 'BIG SHOT!', '#ffef3f');
           }
         } else {
-          if (this.soul.chargeTimer >= 0.38 && this.soul.shotCooldown <= 0) {
+          if (this.soul.chargeTimer >= chargeNeed && this.soul.shotCooldown <= 0) {
             this.runner.spawnPlayerShot(this.soul.x, this.soul.y - 12, true);
-            this.soul.shotCooldown = 0.26;
+            this.soul.shotCooldown = 0.22;
             this.yellowShotsFired += 1;
             this.addPopup(this.soul.x, this.soul.y - 18, 'BIG SHOT!', '#ffef3f');
           }
@@ -1639,8 +1965,14 @@ export class BattleEngine {
 
     this.hitsTaken += 1;
     this.turnHitsTaken += 1;
+    this.styleCombo = 0;
+    this.styleScore = Math.max(0, this.styleScore - 160);
+    this._refreshStyleRank();
+    this.hitstopTimer = 0.055;
+    this.chromaticTimer = 0.22;
+    this._spawnParticles(this.soul.x, this.soul.y, '#ff3333', 10, 145);
     this.invulnTimer = 0.35 + invulnBonus;
-    this.addScreenShake(5);
+    this.addScreenShake(6);
 
     if (this.assistMode) {
       this.stats.hp = Math.max(1, this.stats.hp - 1);
@@ -1719,6 +2051,10 @@ export class BattleEngine {
     this.gameOver.shattered = false;
     this.gameOver.shards = [];
     this.gameOver.choiceIdx = 0;
+    if (this.endlessMode) {
+      this.recordEndlessRun(this.endlessWave, this.styleRank);
+    }
+    audio.setTempoMult?.(1.0);
     audio.stopBGM();
     audio.soulCrack();
   }
@@ -1829,7 +2165,11 @@ export class BattleEngine {
     else if (this.hitsTaken <= 12) this.victory.rank = 'B';
     else this.victory.rank = 'C';
     this.unlockAchievement('Dawn Savior');
-    audio.playBGM('ending');
+    if (endingType === 'void_unbound' || this.phase >= 5) {
+      this.unlockAchievement('Void Sovereign');
+    }
+    audio.setTempoMult?.(1.0);
+    audio.playBGM('victory');
   }
 
   _updateVictory(input) {
@@ -1918,60 +2258,77 @@ export class BattleEngine {
       ctx.translate(sx, sy);
     }
 
-    // Pure black Undertale battle backdrop with Phase 3 dawn / Phase 4 void glow
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, 640, 480);
-    if (this.phase === 3) {
-      const dawnGrad = ctx.createLinearGradient(0, 0, 0, 260);
-      dawnGrad.addColorStop(0, 'rgba(92, 42, 74, 0.28)');
-      dawnGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = dawnGrad;
-      ctx.fillRect(0, 0, 640, 260);
-    } else if (this.phase >= 4) {
-      const voidGrad = ctx.createLinearGradient(0, 0, 0, 260);
-      voidGrad.addColorStop(0, 'rgba(72, 22, 118, 0.34)');
-      voidGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = voidGrad;
-      ctx.fillRect(0, 0, 640, 260);
-    }
+    // Dynamic Phase 1-5 Battle Backdrop (Beat-Synced)
+    const beatPulse = audio.getBeatPulse ? audio.getBeatPulse() : 0;
+    drawBattleBackdrop(ctx, {
+      phase: this.phase,
+      time: this.time,
+      beatPulse,
+      width: 640,
+      height: 480
+    });
 
-    // Subtle Judgment Hall floor line behind Sans
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    // Subtle Judgment Hall floor line behind Boss
+    ctx.strokeStyle = this.phase >= 5 ? 'rgba(217, 70, 239, 0.25)' : 'rgba(255, 255, 255, 0.08)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(60, 212);
     ctx.lineTo(580, 212);
     ctx.stroke();
 
-    // W.D. Gaster Overlay behind Sans in Phase 4 or during Gaster-infused attacks (Phase 2+)
-    if (!this.sans.defeated && ((this.phase >= 2 && this.runner.gasterActive) || this.phase === 4)) {
-      const gasterOpts = {
+    // Boss Character: Phase 5 Secret Boss W.D. Gaster Unbound OR Sans + Phase 2-4 Gaster Overlay
+    if (this.phase >= 5 && (!this.sans.defeated || this.fightBar.damageTimer > 0)) {
+      drawGasterUnbound(ctx, this.sans.x, this.sans.y + 8, {
         time: this.time,
-        alpha: this.phase === 4 ? 0.85 : 0.68,
-        activeHands: Boolean(this.runner.gasterActive || this.phase === 4),
-        handGlow: this.phase === 4 || Boolean(this.runner.gasterActive)
-      };
-      if (typeof this.runner.gasterAlpha === 'number') gasterOpts.alpha = this.runner.gasterAlpha;
-      if (typeof this.runner.leftHandX === 'number') gasterOpts.leftHandX = this.runner.leftHandX;
-      if (typeof this.runner.leftHandY === 'number') gasterOpts.leftHandY = this.runner.leftHandY;
-      if (typeof this.runner.rightHandX === 'number') gasterOpts.rightHandX = this.runner.rightHandX;
-      if (typeof this.runner.rightHandY === 'number') gasterOpts.rightHandY = this.runner.rightHandY;
-      drawGasterOverlay(ctx, this.sans.x, this.sans.y, gasterOpts);
-    }
-
-    // Draw Sans
-    if (!this.sans.defeated || this.fightBar.damageTimer > 0) {
-      drawSansBattle(ctx, this.sans.x, this.sans.y, {
-        time: this.time,
-        expression: this.sans.expression,
-        pose: this.sans.pose,
         phase: this.phase,
-        dodgeOffsetX: this.sans.dodgeOffsetX,
         flashAlpha: this.sans.flashAlpha,
         hurtShake: this.sans.hurtShake,
-        sweat: this.sans.sweat,
-        auraIntensity: this.phase >= 4 ? 0.85 : this.phase === 3 ? 0.6 : 0
+        beatPulse
       });
+    } else {
+      if (!this.sans.defeated && ((this.phase >= 2 && this.runner.gasterActive) || this.phase === 4)) {
+        const gasterOpts = {
+          time: this.time,
+          alpha: this.phase === 4 ? 0.85 : 0.68,
+          activeHands: Boolean(this.runner.gasterActive || this.phase === 4),
+          handGlow: this.phase === 4 || Boolean(this.runner.gasterActive)
+        };
+        if (typeof this.runner.gasterAlpha === 'number') gasterOpts.alpha = this.runner.gasterAlpha;
+        if (typeof this.runner.leftHandX === 'number') gasterOpts.leftHandX = this.runner.leftHandX;
+        if (typeof this.runner.leftHandY === 'number') gasterOpts.leftHandY = this.runner.leftHandY;
+        if (typeof this.runner.rightHandX === 'number') gasterOpts.rightHandX = this.runner.rightHandX;
+        if (typeof this.runner.rightHandY === 'number') gasterOpts.rightHandY = this.runner.rightHandY;
+        drawGasterOverlay(ctx, this.sans.x, this.sans.y, gasterOpts);
+      }
+
+      if (!this.sans.defeated || this.fightBar.damageTimer > 0) {
+        drawSansBattle(ctx, this.sans.x, this.sans.y, {
+          time: this.time,
+          expression: this.sans.expression,
+          pose: this.sans.pose,
+          phase: this.phase,
+          dodgeOffsetX: this.sans.dodgeOffsetX,
+          flashAlpha: this.sans.flashAlpha,
+          hurtShake: this.sans.hurtShake,
+          sweat: this.sans.sweat,
+          auraIntensity: this.phase >= 4 ? 0.85 : this.phase === 3 ? 0.6 : 0
+        });
+      }
+    }
+
+    // Crisp Slash Arc VFX across the Boss
+    for (const sa of this.slashArcs) {
+      const p = 1 - sa.timer / sa.maxTimer;
+      ctx.save();
+      ctx.strokeStyle = '#ffffff';
+      ctx.shadowColor = sa.color;
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = Math.max(1, (1 - p) * 6);
+      ctx.beginPath();
+      ctx.moveTo(sa.x - 36, sa.y - 28);
+      ctx.lineTo(sa.x - 36 + 76 * Math.min(1, p * 1.6), sa.y - 28 + 64 * Math.min(1, p * 1.6));
+      ctx.stroke();
+      ctx.restore();
     }
 
     // MISS or 9999999 Damage Popup
@@ -2006,8 +2363,16 @@ export class BattleEngine {
 
     ctx.fillStyle = '#000000';
     ctx.fillRect(this.box.x, this.box.y, this.box.w, this.box.h);
-    ctx.strokeStyle = Math.abs(boxTilt) > 0.005 ? '#e879f9' : '#ffffff';
-    ctx.lineWidth = 4;
+    const beatBorder =
+      Math.abs(boxTilt) > 0.005 || this.phase >= 5
+        ? '#e879f9'
+        : beatPulse > 0.55 && this.phase >= 2
+          ? this.phase >= 4
+            ? '#c084fc'
+            : '#2ce8f5'
+          : '#ffffff';
+    ctx.strokeStyle = beatBorder;
+    ctx.lineWidth = 4 + (this.state === 'DEFEND_ATTACK' ? beatPulse * 1.4 : 0);
     ctx.strokeRect(this.box.x, this.box.y, this.box.w, this.box.h);
 
     // Contents inside Battle Box
@@ -2024,7 +2389,12 @@ export class BattleEngine {
     } else if (this.state === 'DIALOGUE_TEXT') {
       this._renderBoxDialogue(ctx);
     } else if (this.state === 'DEFEND_ATTACK') {
+      this.runner.currentSoulMode = this.soul.mode;
       this.runner.renderInsideBox(ctx, this.box);
+      drawSoulTrail(ctx, this.soulTrail, this.soul.mode, {
+        gravity: this.soul.gravity,
+        skin: this.soulSkin
+      });
       const flash = this.invulnTimer > 0 && Math.floor(this.invulnTimer * 24) % 2 === 0;
       if (this.soul.mode === 'yellow' && this.soul.chargeTimer >= 0.12) {
         const chargePct = Math.min(1, this.soul.chargeTimer / 0.38);
@@ -2041,8 +2411,19 @@ export class BattleEngine {
         gravity: this.soul.gravity,
         shieldDir: this.soul.shieldDir,
         flash,
-        grazeFlash: this.soul.grazeFlashTimer > 0
+        grazeFlash: this.soul.grazeFlashTimer > 0,
+        skin: this.soulSkin,
+        dashing: this.soul.dashTimer > 0,
+        dashReady: this.soul.dashCooldown <= 0
       });
+      // Render combat particles inside Battle Box
+      for (const p of this.particles) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.life / (p.maxLife * 0.6)));
+        ctx.fillStyle = p.color;
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+        ctx.restore();
+      }
       if (this.soulTransitionRing) {
         const prog = 1 - this.soulTransitionRing.timer / this.soulTransitionRing.maxTimer;
         ctx.save();
@@ -2124,10 +2505,23 @@ export class BattleEngine {
       ctx.restore();
     }
 
-    // Mode Badge (Endless Wave / Boss Rush / Practice Attack) & Story Boss Stamina HUD
+    // Mode Badge (Endless Wave / Boss Rush / Practice Attack) & Story Boss Stamina HUD & Style Rank
     this._renderModeHudBadge(ctx);
     this._renderBossHud(ctx);
+    this._renderStyleRankBadge(ctx);
     this._renderPopups(ctx);
+
+    // Chromatic glitch border flash on damage or Void Unbound transition
+    if (this.chromaticTimer > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(0.42, this.chromaticTimer * 1.4);
+      ctx.strokeStyle = '#ff2244';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(4, 4, 632, 472);
+      ctx.strokeStyle = '#2ce8f5';
+      ctx.strokeRect(10, 8, 620, 464);
+      ctx.restore();
+    }
 
     // Phase Banner Toast
     if (this.phaseBannerTimer > 0) {
@@ -2258,12 +2652,21 @@ export class BattleEngine {
 
     const total = ATTACK_NAMES.length;
     const staminaPct = Math.max(0, Math.min(1, 1 - this.turnIndex / total));
-    const phaseAccent = this.phase >= 4 ? '#c084fc' : this.phase === 3 ? '#ff4c4c' : this.phase === 2 ? '#2ce8f5' : '#e2e8f0';
+    const phaseAccent =
+      this.phase >= 5
+        ? '#e879f9'
+        : this.phase === 4
+          ? '#c084fc'
+          : this.phase === 3
+            ? '#ff4c4c'
+            : this.phase === 2
+              ? '#2ce8f5'
+              : '#e2e8f0';
 
     ctx.save();
     const x = 14;
     const y = 12;
-    const w = 176;
+    const w = 186;
     const h = 30;
     ctx.fillStyle = 'rgba(8, 8, 16, 0.84)';
     ctx.fillRect(x, y, w, h);
@@ -2273,13 +2676,34 @@ export class BattleEngine {
 
     ctx.fillStyle = phaseAccent;
     ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillText(`PHASE ${this.phase}/4   ${this.turnIndex + 1}/${total}`, x + 8, y + 13);
+    const titleStr = this.phase >= 5 ? `VOID UNBOUND ${this.turnIndex + 1}/${total}` : `PHASE ${this.phase}/5  ${this.turnIndex + 1}/${total}`;
+    ctx.fillText(titleStr, x + 8, y + 13);
 
     // Boss Stamina Bar
     ctx.fillStyle = '#1f1f2e';
     ctx.fillRect(x + 8, y + 19, w - 16, 6);
     ctx.fillStyle = phaseAccent;
     ctx.fillRect(x + 8, y + 19, Math.round((w - 16) * staminaPct), 6);
+    ctx.restore();
+  }
+
+  _renderStyleRankBadge(ctx) {
+    if (this.state !== 'DEFEND_ATTACK' && this.styleScore <= 0) return;
+    const colors = { SS: '#e879f9', S: '#ffef3f', A: '#2ce8f5', B: '#4ade80', C: '#cbd5e1' };
+    const clr = colors[this.styleRank] || '#ffffff';
+    ctx.save();
+    ctx.fillStyle = 'rgba(8, 8, 16, 0.85)';
+    ctx.fillRect(496, 12, 130, 34);
+    ctx.strokeStyle = clr;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(496, 12, 130, 34);
+    ctx.fillStyle = clr;
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText(`RANK ${this.styleRank}`, 506, 28);
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillStyle = '#cbd5e1';
+    const dashTxt = this.soul.dashCooldown <= 0 ? 'DASH OK' : 'DASH ..';
+    ctx.fillText(`x${this.styleCombo} ${dashTxt}`, 506, 40);
     ctx.restore();
   }
 
@@ -2682,11 +3106,18 @@ export class BattleEngine {
 
     const isBossRush = this.victory.ending === 'boss_rush';
     const isTruce = this.victory.ending === 'truce';
+    const isVoidUnbound = this.victory.ending === 'void_unbound';
     ctx.textAlign = 'center';
-    ctx.fillStyle = isBossRush ? '#f97316' : isTruce ? '#ffd770' : '#ff4c4c';
-    ctx.font = '22px "Press Start 2P", monospace';
+    ctx.fillStyle = isVoidUnbound ? '#e879f9' : isBossRush ? '#f97316' : isTruce ? '#ffd770' : '#ff4c4c';
+    ctx.font = '21px "Press Start 2P", monospace';
     ctx.fillText(
-      isBossRush ? 'BOSS RUSH CLEARED!' : isTruce ? 'DAWN TRUCE REACHED' : 'LAST NIGHT CLEARED',
+      isVoidUnbound
+        ? 'VOID UNBOUND DEFEATED'
+        : isBossRush
+          ? 'BOSS RUSH CLEARED!'
+          : isTruce
+            ? 'DAWN TRUCE REACHED'
+            : 'LAST NIGHT CLEARED',
       320,
       110
     );
@@ -2694,11 +3125,13 @@ export class BattleEngine {
     ctx.fillStyle = '#ffffff';
     ctx.font = '13px "Press Start 2P", monospace';
     ctx.fillText(
-      isBossRush
-        ? `All ${ATTACK_NAMES.length} signature patterns endured.`
-        : isTruce
-          ? 'You lowered your blade and chose mercy.'
-          : 'The final judgment ends in silence.',
+      isVoidUnbound
+        ? 'Entry Seventeen sealed. Reality stabilizes at dawn.'
+        : isBossRush
+          ? `All ${ATTACK_NAMES.length} signature patterns endured.`
+          : isTruce
+            ? 'You lowered your blade and chose mercy.'
+            : 'The final judgment ends in silence.',
       320,
       154
     );

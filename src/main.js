@@ -1,16 +1,19 @@
 // UNDERTALE: LAST NIGHT — Main Game Loop, Unified Input, Title Screen, UI & Mouse Orchestration
 
 import { ATTACK_META } from './attacks.js';
-import { audio } from './audio.js';
+import { TRACK_CATALOG, audio } from './audio.js';
 import { ACHIEVEMENT_DEFS, BattleEngine } from './battle.js';
 import { OverworldEngine } from './overworld.js';
-import { drawSansBattle, drawSoul } from './sprites.js';
+import { SOUL_SKINS, drawSansBattle, drawSoul } from './sprites.js';
+
+const MODIFIERS_STORAGE_KEY = 'undertale_last_night_modifiers_v1';
 
 class InputManager {
   constructor() {
     this.held = new Set();
     this.pressed = new Set();
     this.virtualHeld = new Set();
+    this.virtualSources = new Map();
     this.prevPadButtons = {};
   }
 
@@ -29,15 +32,37 @@ class InputManager {
     this.held.delete(code);
   }
 
-  setVirtual(code, down) {
+  setPointerVirtual(sourceId, code, down) {
+    let sources = this.virtualSources.get(code);
+    if (!sources) {
+      sources = new Set();
+      this.virtualSources.set(code, sources);
+    }
+    const wasDown = sources.size > 0;
     if (down) {
-      if (!this.virtualHeld.has(code)) {
+      sources.add(sourceId);
+      if (!wasDown) {
         this.pressed.add(code);
       }
       this.virtualHeld.add(code);
     } else {
-      this.virtualHeld.delete(code);
+      sources.delete(sourceId);
+      if (sources.size === 0) {
+        this.virtualHeld.delete(code);
+      }
     }
+  }
+
+  setVirtual(code, down) {
+    this.setPointerVirtual('default', code, down);
+  }
+
+  setJoystickVector(dx, dy) {
+    const dead = 0.26;
+    this.setPointerVirtual('vstick', 'ArrowLeft', dx < -dead);
+    this.setPointerVirtual('vstick', 'ArrowRight', dx > dead);
+    this.setPointerVirtual('vstick', 'ArrowUp', dy < -dead);
+    this.setPointerVirtual('vstick', 'ArrowDown', dy > dead);
   }
 
   pollGamepad() {
@@ -128,6 +153,12 @@ export class UndertaleLastNightGame {
     });
 
     this.hasSave = this.overworld.loadSaveData();
+    this.modifiers = this._loadModifiers();
+    this.logoImg = null;
+    if (typeof Image !== 'undefined') {
+      this.logoImg = new Image();
+      this.logoImg.src = 'assets/logo.png';
+    }
     this.stars = Array.from({ length: 42 }, (_, i) => ({
       x: (i * 97) % 640,
       y: (i * 59) % 240,
@@ -139,10 +170,36 @@ export class UndertaleLastNightGame {
     this.lastTime = 0;
   }
 
+  _loadModifiers() {
+    const base = { ironman: false, hyperSpeed: false, invertedGravity: false, mirrorBox: false };
+    if (typeof localStorage === 'undefined') return base;
+    try {
+      const raw = localStorage.getItem(MODIFIERS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return { ...base, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+    } catch {
+      return base;
+    }
+  }
+
+  _saveModifiers() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(MODIFIERS_STORAGE_KEY, JSON.stringify(this.modifiers));
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
   returnToTitle() {
     this.mode = 'TITLE';
     this.hasSave = this.overworld.loadSaveData();
-    audio.stopBGM();
+    audio.setTempoMult?.(1.0);
+    if (audio.ctx && audio.ctx.state === 'running') {
+      audio.playBGM('title');
+    } else {
+      audio.stopBGM();
+    }
   }
 
   startFullGame(useSave = false) {
@@ -175,6 +232,9 @@ export class UndertaleLastNightGame {
       inventory: this.overworld.inventory,
       weapon: this.overworld.stats.weapon,
       armor: this.overworld.stats.armor,
+      soulSkin: this.overworld.soulSkin,
+      hasVoidKey: this.overworld.hasVoidKey,
+      modifiers: this.modifiers,
       customSpeedMult: this.customSpeedMult
     });
   }
@@ -187,6 +247,9 @@ export class UndertaleLastNightGame {
       phase,
       weapon: this.overworld.stats.weapon,
       armor: this.overworld.stats.armor,
+      soulSkin: this.overworld.soulSkin,
+      hasVoidKey: this.overworld.hasVoidKey || phase >= 5,
+      modifiers: this.modifiers,
       customSpeedMult: this.customSpeedMult
     });
   }
@@ -199,6 +262,8 @@ export class UndertaleLastNightGame {
       practiceAttackIndex: index,
       weapon: this.overworld.stats.weapon,
       armor: this.overworld.stats.armor,
+      soulSkin: this.overworld.soulSkin,
+      modifiers: this.modifiers,
       customSpeedMult: this.customSpeedMult
     });
   }
@@ -212,6 +277,8 @@ export class UndertaleLastNightGame {
       phase: 4,
       weapon: this.overworld.stats.weapon,
       armor: this.overworld.stats.armor,
+      soulSkin: this.overworld.soulSkin,
+      modifiers: this.modifiers,
       customSpeedMult: this.customSpeedMult
     });
   }
@@ -225,6 +292,8 @@ export class UndertaleLastNightGame {
       phase: 1,
       weapon: this.overworld.stats.weapon,
       armor: this.overworld.stats.armor,
+      soulSkin: this.overworld.soulSkin,
+      modifiers: this.modifiers,
       customSpeedMult: this.customSpeedMult
     });
   }
@@ -247,15 +316,18 @@ export class UndertaleLastNightGame {
     this.overworld.lastEnding = res.ending;
     this.overworld.lastRank = res.rank;
     this.overworld.stats.hp = this.overworld.stats.maxHp;
+    this.overworld.stats.gold += res.ending === 'void_unbound' ? 200 : 120;
     this.overworld.writeSaveData();
     this.hasSave = true;
 
     this.mode = 'OVERWORLD';
     this.overworld.enterRoom('throne_approach', 130, 365);
     this.overworld.startDialogue([
-      res.ending === 'truce'
-        ? '* For the first time in countless resets, the sky outside brightens.'
-        : '* Silence settles over the hall as dawn spills across the stone.',
+      res.ending === 'void_unbound'
+        ? '* W.D. Gaster Unbound dissolves into light. Every broken string mends at dawn.'
+        : res.ending === 'truce'
+          ? '* For the first time in countless resets, the sky outside brightens.'
+          : '* Silence settles over the hall as dawn spills across the stone.',
       '* Walk up to the balcony railing and press [Z] to view your summary.'
     ]);
   }
@@ -271,8 +343,9 @@ export class UndertaleLastNightGame {
       { label: 'Jump to Sans Battle (Phase 2)', action: () => this.jumpToBattlePhase(2) },
       { label: 'Jump to Sans Battle (Phase 3)', action: () => this.jumpToBattlePhase(3) },
       { label: 'Jump to Sans Battle (Phase 4)', action: () => this.jumpToBattlePhase(4) },
+      { label: 'Secret Phase 5 (W.D. Gaster Unbound)', action: () => this.jumpToBattlePhase(5) },
       { label: `Full Boss Rush (${ATTACK_META.length} Attacks)`, action: () => this.startBossRush() },
-      { label: 'Endless Survival (Phase 4)', action: () => this.startEndlessBattle() },
+      { label: 'Endless Survival (Phases 2-5)', action: () => this.startEndlessBattle() },
       { label: `Attack Practice Menu (${ATTACK_META.length})`, action: () => this.openAttackSelect() },
       { label: 'Controls & Mechanics Guide', action: () => { this.mode = 'CONTROLS_LORE'; } }
     );
@@ -479,7 +552,15 @@ export class UndertaleLastNightGame {
     ctx.fillStyle = '#2ce8f5';
     ctx.fillRect(140, 112, 360, 2);
 
-    drawSansBattle(ctx, 108, 355, {
+    if (this.logoImg && this.logoImg.complete && this.logoImg.naturalWidth > 0) {
+      const bob = Math.sin(this.time * 2.4) * 3;
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(this.logoImg, 62, Math.round(126 + bob), 92, 92);
+      ctx.restore();
+    }
+
+    drawSansBattle(ctx, 108, 370, {
       time: this.time,
       expression: 'blueEye',
       pose: 'pockets',
@@ -499,21 +580,21 @@ export class UndertaleLastNightGame {
     ctx.strokeRect(boxX, boxY, boxW, boxH);
 
     this._titleRects = [];
-    const rowStep = Math.min(30, Math.floor((boxH - 22) / opts.length));
+    const rowStep = Math.min(28, Math.floor((boxH - 18) / opts.length));
     ctx.textAlign = 'left';
     ctx.font = '10px "Press Start 2P", monospace';
     opts.forEach((opt, idx) => {
-      const oy = boxY + 26 + idx * rowStep;
-      this._titleRects.push({ idx, x: boxX + 8, y: oy - 16, w: boxW - 16, h: rowStep });
+      const oy = boxY + 24 + idx * rowStep;
+      this._titleRects.push({ idx, x: boxX + 8, y: oy - 15, w: boxW - 16, h: rowStep });
       if (idx === this.titleIndex) {
         ctx.fillStyle = 'rgba(255, 239, 63, 0.08)';
-        ctx.fillRect(boxX + 8, oy - 15, boxW - 16, rowStep - 4);
+        ctx.fillRect(boxX + 8, oy - 14, boxW - 16, rowStep - 3);
         drawSoul(ctx, boxX + 20, oy - 5, 'red', { scale: 0.85 });
         ctx.fillStyle = '#ffef3f';
       } else {
         ctx.fillStyle = '#ffffff';
       }
-      ctx.fillText(opt.label, boxX + 38, oy);
+      ctx.fillText(this._fitText(ctx, opt.label, boxW - 48), boxX + 38, oy);
     });
 
     ctx.textAlign = 'center';
@@ -547,38 +628,41 @@ export class UndertaleLastNightGame {
     ctx.save();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffef3f';
-    ctx.font = '14px "Press Start 2P", monospace';
-    ctx.fillText('ATTACK PRACTICE SELECT', 320, 30);
+    ctx.font = '13px "Press Start 2P", monospace';
+    ctx.fillText('ATTACK PRACTICE SELECT', 320, 26);
 
     const noHitCount = this.battle.noHitAttacks.size;
     ctx.fillStyle = '#9898ad';
     ctx.font = '8px "Press Start 2P", monospace';
     ctx.fillText(
-      `16 Signature Patterns (Phases 1-4)   |   ★ NO-HIT: ${noHitCount}/${ATTACK_META.length}`,
+      `${ATTACK_META.length} Patterns (Phases 1-5)   |   ★ NO-HIT: ${noHitCount}/${ATTACK_META.length}`,
       320,
-      48
+      44
     );
 
     const phaseColors = {
       1: '#cbd5e1',
       2: '#2ce8f5',
       3: '#fb923c',
-      4: '#c084fc'
+      4: '#c084fc',
+      5: '#e879f9'
     };
     const soulColors = {
       red: '#ff2a2a',
       blue: '#38bdf8',
       green: '#4ade80',
       yellow: '#facc15',
+      purple: '#d946ef',
+      'purple+red': '#d946ef',
       mixed: '#e879f9'
     };
 
     const startX = 24;
-    const startY = 60;
+    const startY = 54;
     const cardW = 290;
-    const cardH = 33;
+    const cardH = 27;
     const gapX = 12;
-    const gapY = 5;
+    const gapY = 3;
 
     this._attackCardRects = [];
 
@@ -599,12 +683,12 @@ export class UndertaleLastNightGame {
       ctx.strokeRect(x, y, cardW, cardH);
 
       if (selected) {
-        drawSoul(ctx, x + 11, y + 16, 'red', { scale: 0.65 });
+        drawSoul(ctx, x + 11, y + 13.5, 'red', { scale: 0.6 });
       } else {
         ctx.fillStyle = noHitCleared ? '#facc15' : '#334155';
-        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.font = '9px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(noHitCleared ? '★' : '·', x + 11, y + 21);
+        ctx.fillText(noHitCleared ? '★' : '·', x + 11, y + 17);
       }
 
       const pColor = phaseColors[item.phase] || '#ffffff';
@@ -614,48 +698,48 @@ export class UndertaleLastNightGame {
       // Attack index & title measured safely so it never overlaps right-side badges
       ctx.textAlign = 'left';
       ctx.fillStyle = selected ? '#ffef3f' : '#f1f5f9';
-      ctx.font = '15px "VT323", "Courier New", monospace';
+      ctx.font = '14px "VT323", "Courier New", monospace';
       const label = `#${item.index + 1} ${item.title}`;
       const maxTitleW = cardW - 120;
       const shownTitle = this._fitText(ctx, label, maxTitleW);
-      ctx.fillText(shownTitle, x + 21, y + 22);
+      ctx.fillText(shownTitle, x + 21, y + 18);
 
       // Difficulty badge
       ctx.fillStyle = 'rgba(255, 239, 63, 0.08)';
-      ctx.fillRect(x + cardW - 97, y + 8, 25, 17);
+      ctx.fillRect(x + cardW - 97, y + 5, 25, 17);
       ctx.strokeStyle = '#854d0e';
       ctx.lineWidth = 1;
-      ctx.strokeRect(x + cardW - 97, y + 8, 25, 17);
+      ctx.strokeRect(x + cardW - 97, y + 5, 25, 17);
       ctx.textAlign = 'center';
       ctx.fillStyle = '#facc15';
       ctx.font = '7px "Press Start 2P", monospace';
-      ctx.fillText(`${item.stars || 3}★`, x + cardW - 84.5, y + 20);
+      ctx.fillText(`${item.stars || 3}★`, x + cardW - 84.5, y + 17);
 
       // Phase badge
       ctx.fillStyle = 'rgba(255,255,255,0.08)';
-      ctx.fillRect(x + cardW - 69, y + 8, 25, 17);
+      ctx.fillRect(x + cardW - 69, y + 5, 25, 17);
       ctx.strokeStyle = pColor;
-      ctx.strokeRect(x + cardW - 69, y + 8, 25, 17);
+      ctx.strokeRect(x + cardW - 69, y + 5, 25, 17);
       ctx.fillStyle = pColor;
       ctx.font = '8px "Press Start 2P", monospace';
-      ctx.fillText(`P${item.phase}`, x + cardW - 56.5, y + 20);
+      ctx.fillText(`P${item.phase}`, x + cardW - 56.5, y + 17);
 
       // SOUL mode badge
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(x + cardW - 41, y + 8, 34, 17);
+      ctx.fillRect(x + cardW - 41, y + 5, 34, 17);
       ctx.strokeStyle = sColor;
-      ctx.strokeRect(x + cardW - 41, y + 8, 34, 17);
+      ctx.strokeRect(x + cardW - 41, y + 5, 34, 17);
       ctx.fillStyle = sColor;
-      ctx.fillText(modeKey.slice(0, 3).toUpperCase(), x + cardW - 24, y + 20);
+      ctx.fillText(modeKey.slice(0, 3).toUpperCase(), x + cardW - 24, y + 17);
     });
 
     // Selected Attack Detail Box
     const sel = ATTACK_META[this.attackSelectIndex];
     ctx.fillStyle = '#0a0a12';
-    ctx.fillRect(24, 368, 592, 62);
+    ctx.fillRect(24, 360, 592, 66);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
-    ctx.strokeRect(24, 368, 592, 62);
+    ctx.strokeRect(24, 360, 592, 66);
 
     if (sel) {
       const noHitStr = this.battle.noHitAttacks.has(sel.index) ? '  ★ NO-HIT' : '';
@@ -666,18 +750,18 @@ export class UndertaleLastNightGame {
       ctx.fillText(
         `#${sel.index + 1} ${sel.title}  |  PHASE ${sel.phase}  |  ${String(sel.soulMode || 'red').toUpperCase()}${noHitStr}`,
         38,
-        388
+        380
       );
       ctx.textAlign = 'right';
       ctx.fillStyle = '#facc15';
-      ctx.fillText(starsStr, 602, 388);
+      ctx.fillText(starsStr, 602, 380);
 
       ctx.textAlign = 'left';
       ctx.fillStyle = '#e2e8f0';
       ctx.font = '16px "VT323", "Courier New", monospace';
       const descLines = this._wrapText(ctx, sel.desc || 'Practice this attack pattern.', 562);
       descLines.slice(0, 2).forEach((ln, i) => {
-        ctx.fillText(ln, 38, 408 + i * 16);
+        ctx.fillText(ln, 38, 401 + i * 16);
       });
     }
 
@@ -685,7 +769,7 @@ export class UndertaleLastNightGame {
     const barBtns = [
       {
         x: 24,
-        y: 440,
+        y: 436,
         w: 136,
         h: 28,
         color: '#ffef3f',
@@ -694,7 +778,7 @@ export class UndertaleLastNightGame {
       },
       {
         x: 170,
-        y: 440,
+        y: 436,
         w: 158,
         h: 28,
         color: '#2ce8f5',
@@ -706,11 +790,11 @@ export class UndertaleLastNightGame {
       },
       {
         x: 338,
-        y: 440,
+        y: 436,
         w: 154,
         h: 28,
         color: '#fb923c',
-        label: 'BOSS RUSH (16)',
+        label: `BOSS RUSH (${ATTACK_META.length})`,
         action: () => {
           audio.menuSelect();
           this.startBossRush();
@@ -718,7 +802,7 @@ export class UndertaleLastNightGame {
       },
       {
         x: 502,
-        y: 440,
+        y: 436,
         w: 114,
         h: 28,
         color: '#94a3b8',
@@ -762,16 +846,16 @@ export class UndertaleLastNightGame {
     ctx.textAlign = 'left';
     ctx.font = '9px "Press Start 2P", monospace';
     const rows = [
-      { c: '#ffffff', t: 'MOVE / SHIELD: Arrow Keys / WASD / Click Canvas Menus' },
+      { c: '#ffffff', t: 'MOVE / SHIELD: Arrow Keys / WASD / Handheld Stick' },
       { c: '#ffffff', t: 'CONFIRM / FIRE:[Z] or Enter (Hold [Z] in Yellow = BIG SHOT!)' },
-      { c: '#ffffff', t: 'CANCEL / MENU: [X] Back   |   [C] Field Menu / Speed' },
+      { c: '#2ce8f5', t: 'SOUL DASH:     Press [X] or [Shift] in combat -> i-frame burst!' },
       { c: '#2ce8f5', t: 'BLUE BONES:    Freeze still! (Blue SOUL jumps)' },
-      { c: '#ffa024', t: 'ORANGE / TP:   Keep moving! Graze bullets for TP' },
+      { c: '#ffa024', t: 'ORANGE / TP:   Keep moving! Close-call graze triggers slow-mo!' },
       { c: '#4ade80', t: 'GREEN SOUL:    Point shield at incoming spears (+TP)' },
       { c: '#facc15', t: 'YELLOW SOUL:   Tap or Hold [Z] to break barriers & bones' },
-      { c: '#d926ff', t: 'KARMA & ACT:   TP Heal (40) / Barrier (60) are free bonus acts!' },
-      { c: '#c084fc', t: 'RELIC ARMORY:  Swap Weapon & Armor in Antechamber' },
-      { c: '#ffef3f', t: '4 PHASES+:     Phase 3 Climax -> Void -> True Finale + Rush!' }
+      { c: '#e879f9', t: 'PURPLE SOUL:   Up/Down switches between 3 glowing web rails!' },
+      { c: '#c084fc', t: 'ECHO SANCTUM:  Walk West from Antechamber for Void Key + Skins' },
+      { c: '#ffef3f', t: 'SECRET PH 5:   Bring Void Key past Phase 4 -> Gaster Unbound!' }
     ];
 
     rows.forEach((r, idx) => {
@@ -828,20 +912,35 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'
     ]);
 
+    const syncMuteButtons = () => {
+      const btnMute = document.getElementById('btnMute');
+      const btnMobileMute = document.getElementById('btnMobileMute');
+      if (btnMute) btnMute.textContent = audio.muted ? '🔇 Muted' : '🔊 Audio';
+      if (btnMobileMute) btnMobileMute.textContent = audio.muted ? '🔇' : '🔊';
+    };
+
+    const ensureTitleMusic = () => {
+      audio.ensureContext();
+      if (game.mode === 'TITLE' && !audio.currentTrack) {
+        audio.playBGM('title');
+      }
+    };
+
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape') {
-        const modal = document.getElementById('achievementsModal');
-        if (modal && !modal.classList.contains('hidden')) {
-          modal.classList.add('hidden');
-          return;
+        for (const mid of ['achievementsModal', 'jukeboxModal', 'modifiersModal', 'mobileDrawer']) {
+          const modal = document.getElementById(mid);
+          if (modal && !modal.classList.contains('hidden')) {
+            modal.classList.add('hidden');
+            return;
+          }
         }
       }
       if (preventKeys.has(e.code)) e.preventDefault();
-      audio.ensureContext();
+      ensureTitleMusic();
       if (e.code === 'KeyM') {
-        const muted = audio.toggleMute();
-        const btnMute = document.getElementById('btnMute');
-        if (btnMute) btnMute.textContent = muted ? '🔇 Muted' : '🔊 Audio';
+        audio.toggleMute();
+        syncMuteButtons();
         return;
       }
       game.input.triggerPress(e.code);
@@ -858,23 +957,25 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     });
 
     canvas.addEventListener('pointerdown', (e) => {
-      audio.ensureContext();
+      ensureTitleMusic();
       canvas.focus();
       const pt = toCanvasCoords(e);
       game.handleCanvasClick(pt.x, pt.y);
     });
 
-    // Touch / Virtual Pad bindings
+    // Multi-Touch Pointer-ID Virtual Pad bindings (supports move + shoot/dash simultaneously)
     document.querySelectorAll('[data-key]').forEach((btn) => {
       const code = btn.getAttribute('data-key');
       const down = (ev) => {
         ev.preventDefault();
-        audio.ensureContext();
-        game.input.setVirtual(code, true);
+        ensureTitleMusic();
+        btn.classList.add('active-touch');
+        game.input.setPointerVirtual(`p${ev.pointerId ?? 'm'}`, code, true);
       };
       const up = (ev) => {
         ev.preventDefault();
-        game.input.setVirtual(code, false);
+        btn.classList.remove('active-touch');
+        game.input.setPointerVirtual(`p${ev.pointerId ?? 'm'}`, code, false);
       };
       btn.addEventListener('pointerdown', down);
       btn.addEventListener('pointerup', up);
@@ -882,30 +983,107 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       btn.addEventListener('pointerleave', up);
     });
 
-    // Top HUD controls & Volume Slider
-    const btnMute = document.getElementById('btnMute');
-    if (btnMute) {
-      btnMute.addEventListener('click', () => {
-        audio.ensureContext();
-        const muted = audio.toggleMute();
-        btnMute.textContent = muted ? '🔇 Muted' : '🔊 Audio';
-        btnMute.blur();
-        canvas.focus();
+    // Virtual Analog Thumbstick & Joystick/D-Pad Mode Toggle
+    const PAD_MODE_KEY = 'undertale_last_night_pad_mode_v1';
+    const vstickEl = document.getElementById('virtualStick');
+    const vstickNub = document.getElementById('vstickNub');
+    const classicDpad = document.getElementById('classicDpad');
+    const btnPadSwap = document.getElementById('btnPadSwap');
+    const btnDrawerPadSwap = document.getElementById('btnDrawerPadSwap');
+    let padMode = 'stick';
+    try {
+      const savedPad = localStorage.getItem(PAD_MODE_KEY);
+      if (savedPad === 'dpad' || savedPad === 'stick') padMode = savedPad;
+    } catch {}
+
+    const applyPadMode = () => {
+      const useStick = padMode === 'stick';
+      if (vstickEl) vstickEl.classList.toggle('hidden', !useStick);
+      if (classicDpad) classicDpad.classList.toggle('hidden', useStick);
+      if (btnPadSwap) btnPadSwap.textContent = useStick ? '🕹 Stick' : '✚ D-Pad';
+      if (btnDrawerPadSwap) btnDrawerPadSwap.textContent = useStick ? 'Pad: Virtual Joystick' : 'Pad: Classic D-Pad';
+      try {
+        localStorage.setItem(PAD_MODE_KEY, padMode);
+      } catch {}
+    };
+    applyPadMode();
+
+    const togglePadMode = () => {
+      padMode = padMode === 'stick' ? 'dpad' : 'stick';
+      game.input.setJoystickVector(0, 0);
+      if (vstickNub) vstickNub.style.transform = 'translate(0px, 0px)';
+      applyPadMode();
+    };
+    btnPadSwap?.addEventListener('click', togglePadMode);
+    btnDrawerPadSwap?.addEventListener('click', togglePadMode);
+
+    if (vstickEl && vstickNub) {
+      let stickPointerId = null;
+      const maxR = 34;
+      const updateStick = (ev) => {
+        const rect = vstickEl.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        let dx = ev.clientX - cx;
+        let dy = ev.clientY - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist > maxR) {
+          dx = (dx / dist) * maxR;
+          dy = (dy / dist) * maxR;
+        }
+        vstickNub.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+        game.input.setJoystickVector(dx / maxR, dy / maxR);
+      };
+      vstickEl.addEventListener('pointerdown', (ev) => {
+        ev.preventDefault();
+        ensureTitleMusic();
+        stickPointerId = ev.pointerId;
+        vstickEl.setPointerCapture?.(ev.pointerId);
+        updateStick(ev);
       });
+      vstickEl.addEventListener('pointermove', (ev) => {
+        if (stickPointerId !== ev.pointerId) return;
+        ev.preventDefault();
+        updateStick(ev);
+      });
+      const resetStick = (ev) => {
+        if (stickPointerId !== null && ev.pointerId !== stickPointerId) return;
+        stickPointerId = null;
+        vstickNub.style.transform = 'translate(0px, 0px)';
+        game.input.setJoystickVector(0, 0);
+      };
+      vstickEl.addEventListener('pointerup', resetStick);
+      vstickEl.addEventListener('pointercancel', resetStick);
     }
 
+    // Top HUD controls & Volume Slider (Desktop + Mobile sync)
+    const btnMute = document.getElementById('btnMute');
+    const btnMobileMute = document.getElementById('btnMobileMute');
+    const handleMuteToggle = (btn) => {
+      ensureTitleMusic();
+      audio.toggleMute();
+      syncMuteButtons();
+      btn?.blur();
+      canvas.focus();
+    };
+    btnMute?.addEventListener('click', () => handleMuteToggle(btnMute));
+    btnMobileMute?.addEventListener('click', () => handleMuteToggle(btnMobileMute));
+
     const rngVolume = document.getElementById('rngVolume');
-    if (rngVolume) {
-      rngVolume.addEventListener('input', () => {
-        audio.ensureContext();
-        const v = Number(rngVolume.value) / 100;
-        audio.setVolume(v);
-        if (audio.muted && v > 0) {
-          audio.setMuted(false);
-          if (btnMute) btnMute.textContent = '🔊 Audio';
-        }
-      });
-    }
+    const rngMobileVolume = document.getElementById('rngMobileVolume');
+    const syncVolume = (val) => {
+      audio.ensureContext();
+      const v = Number(val) / 100;
+      audio.setVolume(v);
+      if (rngVolume) rngVolume.value = String(val);
+      if (rngMobileVolume) rngMobileVolume.value = String(val);
+      if (audio.muted && v > 0) {
+        audio.setMuted(false);
+        syncMuteButtons();
+      }
+    };
+    rngVolume?.addEventListener('input', () => syncVolume(rngVolume.value));
+    rngMobileVolume?.addEventListener('input', () => syncVolume(rngMobileVolume.value));
 
     const btnCRT = document.getElementById('btnCRT');
     const crtOverlay = document.getElementById('crtOverlay');
@@ -947,9 +1125,214 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     bindJump('btnJumpP2', () => game.jumpToBattlePhase(2));
     bindJump('btnJumpP3', () => game.jumpToBattlePhase(3));
     bindJump('btnJumpP4', () => game.jumpToBattlePhase(4));
+    bindJump('btnJumpP5', () => game.jumpToBattlePhase(5));
     bindJump('btnAttackSelect', () => game.openAttackSelect());
     bindJump('btnBossRush', () => game.startBossRush());
     bindJump('btnEndless', () => game.startEndlessBattle());
+
+    // Mobile Command Drawer
+    const mobileDrawer = document.getElementById('mobileDrawer');
+    const btnMobileMenu = document.getElementById('btnMobileMenu');
+    const btnCloseDrawer = document.getElementById('btnCloseDrawer');
+    if (mobileDrawer) {
+      btnMobileMenu?.addEventListener('click', () => {
+        mobileDrawer.classList.remove('hidden');
+        btnMobileMenu.blur();
+      });
+      btnCloseDrawer?.addEventListener('click', () => {
+        mobileDrawer.classList.add('hidden');
+        canvas.focus();
+      });
+      mobileDrawer.addEventListener('click', (e) => {
+        if (e.target === mobileDrawer) {
+          mobileDrawer.classList.add('hidden');
+          canvas.focus();
+        }
+      });
+      mobileDrawer.querySelectorAll('[data-drawer-trigger]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const targetId = btn.getAttribute('data-drawer-trigger');
+          mobileDrawer.classList.add('hidden');
+          document.getElementById(targetId)?.click();
+        });
+      });
+    }
+
+    // Jukebox Sound Test Modal & Live FFT Visualizer
+    const jbModal = document.getElementById('jukeboxModal');
+    const btnJukebox = document.getElementById('btnJukebox');
+    const btnCloseJukebox = document.getElementById('btnCloseJukebox');
+    const jbGrid = document.getElementById('jukeboxGrid');
+    const jbNow = document.getElementById('jukeboxNowPlaying');
+    const jbViz = document.getElementById('jukeboxViz');
+    const btnJukeboxStop = document.getElementById('btnJukeboxStop');
+    const rngTempo = document.getElementById('rngJukeboxTempo');
+    const lblTempo = document.getElementById('jukeboxTempoLabel');
+    let jbRafId = null;
+
+    const renderJukeboxGrid = () => {
+      if (!jbGrid) return;
+      jbGrid.innerHTML = '';
+      for (const tr of TRACK_CATALOG) {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = `jb-card${audio.currentTrack === tr.id ? ' playing' : ''}`;
+        const tEl = document.createElement('div');
+        tEl.className = 'jb-title';
+        tEl.textContent = `${audio.currentTrack === tr.id ? '▶ ' : ''}${tr.title} (${tr.bpm} BPM)`;
+        const sEl = document.createElement('div');
+        sEl.className = 'jb-sub';
+        sEl.textContent = tr.subtitle;
+        card.appendChild(tEl);
+        card.appendChild(sEl);
+        card.addEventListener('click', () => {
+          audio.ensureContext();
+          audio.playBGM(tr.id);
+          if (jbNow) jbNow.textContent = `NOW PLAYING: ${tr.title} — ${tr.subtitle} (${Math.round(tr.bpm * audio.tempoMult)} BPM)`;
+          renderJukeboxGrid();
+        });
+        jbGrid.appendChild(card);
+      }
+    };
+
+    const drawJukeboxViz = () => {
+      if (!jbModal || jbModal.classList.contains('hidden')) {
+        jbRafId = null;
+        return;
+      }
+      if (jbViz) {
+        const vctx = jbViz.getContext('2d');
+        const bins = new Uint8Array(32);
+        audio.getVisualizerData?.(bins);
+        vctx.fillStyle = '#05050b';
+        vctx.fillRect(0, 0, jbViz.width, jbViz.height);
+        const bw = Math.floor(jbViz.width / bins.length) - 2;
+        for (let i = 0; i < bins.length; i++) {
+          const val = bins[i] / 255;
+          const bh = Math.max(4, Math.round(val * (jbViz.height - 12)));
+          vctx.fillStyle = val > 0.65 ? '#e879f9' : val > 0.35 ? '#2ce8f5' : '#38bdf8';
+          vctx.fillRect(i * (bw + 2) + 4, jbViz.height - bh - 4, bw, bh);
+        }
+      }
+      jbRafId = requestAnimationFrame(drawJukeboxViz);
+    };
+
+    btnJukebox?.addEventListener('click', () => {
+      audio.ensureContext();
+      renderJukeboxGrid();
+      if (jbModal) jbModal.classList.remove('hidden');
+      if (!jbRafId) drawJukeboxViz();
+      btnJukebox.blur();
+    });
+    btnCloseJukebox?.addEventListener('click', () => {
+      jbModal?.classList.add('hidden');
+      canvas.focus();
+    });
+    jbModal?.addEventListener('click', (e) => {
+      if (e.target === jbModal) {
+        jbModal.classList.add('hidden');
+        canvas.focus();
+      }
+    });
+    btnJukeboxStop?.addEventListener('click', () => {
+      audio.stopBGM();
+      if (jbNow) jbNow.textContent = 'BGM stopped. Pick a track below.';
+      renderJukeboxGrid();
+    });
+    rngTempo?.addEventListener('input', () => {
+      const m = Number(rngTempo.value) / 100;
+      audio.setTempoMult?.(m);
+      if (lblTempo) lblTempo.textContent = `${m.toFixed(2)}x`;
+    });
+
+    // Challenge Modifiers, SOUL Skins & Endless Leaderboard Modal
+    const modModal = document.getElementById('modifiersModal');
+    const btnModifiers = document.getElementById('btnModifiers');
+    const btnCloseModifiers = document.getElementById('btnCloseModifiers');
+    const modGrid = document.getElementById('modifiersGrid');
+    const skinsGrid = document.getElementById('skinsGrid');
+    const lbList = document.getElementById('leaderboardList');
+
+    const renderModifiersModal = () => {
+      if (modGrid) {
+        modGrid.innerHTML = '';
+        const defs = [
+          { key: 'ironman', title: 'Ironman (1 HP)', desc: 'Survive at 1/1 Max HP with Assist disabled.' },
+          { key: 'hyperSpeed', title: 'Hyper Speed (1.35x)', desc: '35% faster bullets & intensified music tempo.' },
+          { key: 'invertedGravity', title: 'Inverted Gravity', desc: 'Flips all Blue SOUL gravity directions upside down.' },
+          { key: 'mirrorBox', title: 'Mirror Horizon', desc: 'Reverses Left/Right steering inside Battle Box.' }
+        ];
+        for (const d of defs) {
+          const on = Boolean(game.modifiers[d.key]);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `mod-card${on ? ' enabled' : ''}`;
+          btn.innerHTML = `<div class="mod-title">${on ? '✓ ' : ''}${d.title}</div><div class="mod-desc">${d.desc}</div>`;
+          btn.addEventListener('click', () => {
+            game.modifiers[d.key] = !game.modifiers[d.key];
+            game._saveModifiers();
+            audio.menuSelect();
+            renderModifiersModal();
+          });
+          modGrid.appendChild(btn);
+        }
+      }
+      if (skinsGrid) {
+        skinsGrid.innerHTML = '';
+        for (const sk of Object.values(SOUL_SKINS)) {
+          const selected = game.overworld.soulSkin === sk.id;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `skin-card${selected ? ' selected' : ''}`;
+          btn.innerHTML = `<div class="skin-title" style="color:${sk.trim || '#ffef3f'}">${selected ? '♥ ' : ''}${sk.name}</div><div class="skin-desc">${sk.desc}</div>`;
+          btn.addEventListener('click', () => {
+            game.overworld.soulSkin = sk.id;
+            game.overworld.unlockedSkins.add(sk.id);
+            game.battle.soulSkin = sk.id;
+            game.overworld.writeSaveData();
+            audio.save();
+            renderModifiersModal();
+          });
+          skinsGrid.appendChild(btn);
+        }
+      }
+      if (lbList) {
+        lbList.innerHTML = '';
+        const board = game.battle.endlessLeaderboard || [];
+        if (board.length === 0) {
+          lbList.innerHTML = `<div class="lb-row"><span>No Endless runs recorded yet (Best Wave: ${game.battle.endlessBestWave})</span><span>-</span></div>`;
+        } else {
+          board.forEach((entry, i) => {
+            const row = document.createElement('div');
+            row.className = 'lb-row';
+            row.textContent = '';
+            const l = document.createElement('span');
+            l.textContent = `#${i + 1}  Wave ${entry.wave}  (Rank ${entry.rank})`;
+            const r = document.createElement('span');
+            r.textContent = entry.date || '';
+            row.appendChild(l);
+            row.appendChild(r);
+            lbList.appendChild(row);
+          });
+        }
+      }
+    };
+
+    btnModifiers?.addEventListener('click', () => {
+      renderModifiersModal();
+      modModal?.classList.remove('hidden');
+      btnModifiers.blur();
+    });
+    btnCloseModifiers?.addEventListener('click', () => {
+      modModal?.classList.add('hidden');
+      canvas.focus();
+    });
+    modModal?.addEventListener('click', (e) => {
+      if (e.target === modModal) {
+        modModal.classList.add('hidden');
+        canvas.focus();
+      }
+    });
 
     // Trophies / Achievements Modal
     const achModal = document.getElementById('achievementsModal');
@@ -1010,6 +1393,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       'btnJumpP2',
       'btnJumpP3',
       'btnJumpP4',
+      'btnJumpP5',
       'btnAttackSelect',
       'btnBossRush',
       'btnEndless'
@@ -1046,7 +1430,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         if (game.mode === 'BATTLE') {
           if (game.battle.state === 'CLIMAX_SLEEP') {
             document.title = 'UNDERTALE: LAST NIGHT — PUSH THE BOX';
-          } else if (game.battle.phase >= 4) {
+          } else if (game.battle.phase >= 5) {
+            document.title = 'UNDERTALE: LAST NIGHT — DARKER YET DARKER';
+          } else if (game.battle.phase === 4) {
             document.title = 'UNDERTALE: LAST NIGHT — HE SEES YOU';
           } else if (game.battle.phase === 3) {
             document.title = 'UNDERTALE: LAST NIGHT — DONT BLINK';

@@ -22,15 +22,34 @@ class SoundEngine {
     this.master = null;
     this.bgmGain = null;
     this.sfxGain = null;
+    this.analyser = null;
+    this.echoSend = null;
+    this.echoDelay = null;
+    this.echoFeedback = null;
+    this.guitarBus = null;
     this.noiseBuffer = null;
 
     this.muted = false;
     this.volume = 0.72;
+    this.tempoMult = 1.0;
+    this.beatPulse = 0;
+    this.lastBeatTime = 0;
+    this.glitchStutterUntil = 0;
     this.currentTrack = null;
     this.stepIndex = 0;
     this.nextNoteTime = 0;
     this.schedulerTimer = null;
     this.lastBlipTime = 0;
+  }
+
+  _makeOverdriveCurve(amount = 14) {
+    const n = 256;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / n - 1;
+      curve[i] = ((1 + amount) * x) / (1 + amount * Math.abs(x));
+    }
+    return curve;
   }
 
   ensureContext() {
@@ -48,9 +67,59 @@ class SoundEngine {
         this.bgmGain.gain.value = 0.28;
         this.sfxGain.gain.value = 0.55;
 
+        // Live FFT Analyser for beat/jukebox visuals
+        if (typeof this.ctx.createAnalyser === 'function') {
+          this.analyser = this.ctx.createAnalyser();
+          this.analyser.fftSize = 128;
+          this.analyser.smoothingTimeConstant = 0.78;
+          this.master.connect(this.analyser);
+          this.analyser.connect(this.ctx.destination);
+        } else {
+          this.master.connect(this.ctx.destination);
+        }
+
+        // Stereo-feel echo delay bus for pads & Void reverb
+        if (typeof this.ctx.createDelay === 'function') {
+          this.echoSend = this.ctx.createGain();
+          this.echoSend.gain.value = 0.26;
+          this.echoDelay = this.ctx.createDelay(1.0);
+          this.echoDelay.delayTime.value = 0.21;
+          const echoTone = this.ctx.createBiquadFilter();
+          echoTone.type = 'lowpass';
+          echoTone.frequency.value = 2600;
+          this.echoFeedback = this.ctx.createGain();
+          this.echoFeedback.gain.value = 0.25;
+
+          this.echoSend.connect(this.echoDelay);
+          this.echoDelay.connect(echoTone);
+          echoTone.connect(this.bgmGain);
+          echoTone.connect(this.echoFeedback);
+          this.echoFeedback.connect(this.echoDelay);
+        }
+
+        // Distorted lead guitar overdrive bus
+        if (typeof this.ctx.createWaveShaper === 'function') {
+          this.guitarBus = this.ctx.createGain();
+          this.guitarBus.gain.value = 0.85;
+          const shaper = this.ctx.createWaveShaper();
+          shaper.curve = this._makeOverdriveCurve(14);
+          shaper.oversample = '2x';
+          const cabFilter = this.ctx.createBiquadFilter();
+          cabFilter.type = 'lowpass';
+          cabFilter.frequency.value = 3400;
+          this.guitarBus.connect(shaper);
+          shaper.connect(cabFilter);
+          cabFilter.connect(this.bgmGain);
+          if (this.echoSend) {
+            const gEcho = this.ctx.createGain();
+            gEcho.gain.value = 0.22;
+            cabFilter.connect(gEcho);
+            gEcho.connect(this.echoSend);
+          }
+        }
+
         this.bgmGain.connect(this.master);
         this.sfxGain.connect(this.master);
-        this.master.connect(this.ctx.destination);
 
         this.noiseBuffer = this._createNoiseBuffer();
       } catch {
@@ -318,6 +387,83 @@ class SoundEngine {
     this._noise(0.18, 2600, 'bandpass', 0.14, 'sfx', 0.01);
   }
 
+  dash() {
+    this._tone(340, 1180, 0.09, 'triangle', 0.18, 'sfx', 0);
+    this._noise(0.08, 2800, 'highpass', 0.14, 'sfx', 0);
+  }
+
+  overdrive() {
+    this._tone(293.66, 587.33, 0.11, 'sawtooth', 0.16, 'sfx', 0);
+    this._tone(587.33, 1174.66, 0.15, 'square', 0.15, 'sfx', 0.06);
+  }
+
+  webMove() {
+    this._tone(420, 660, 0.045, 'triangle', 0.12, 'sfx', 0);
+  }
+
+  rankUp() {
+    [523.25, 659.25, 783.99, 1046.5].forEach((n, idx) => {
+      this._tone(n, n, 0.09, 'square', 0.13, 'sfx', idx * 0.045);
+    });
+  }
+
+  echoFlower() {
+    [523.25, 659.25, 783.99, 987.77].forEach((n, idx) => {
+      this._tone(n, n * 0.99, 0.22, 'sine', 0.13, 'sfx', idx * 0.09);
+    });
+  }
+
+  gasterUnboundRoar() {
+    this._tone(160, 48, 0.65, 'sawtooth', 0.24, 'sfx', 0);
+    this._tone(240, 72, 0.55, 'square', 0.16, 'sfx', 0.04);
+    this._noise(0.6, 620, 'lowpass', 0.22, 'sfx', 0.02);
+  }
+
+  setTempoMult(mult) {
+    const v = Number(mult);
+    this.tempoMult = Number.isFinite(v) ? Math.max(0.65, Math.min(1.45, v)) : 1.0;
+    return this.tempoMult;
+  }
+
+  getBeatPulse() {
+    if (!this.lastBeatTime || this.muted) return 0;
+    const elapsed = (Date.now() - this.lastBeatTime) / 220;
+    this.beatPulse = Math.max(0, Math.min(1, 1 - elapsed));
+    return this.beatPulse;
+  }
+
+  glitchStutter(dur = 0.24) {
+    this.glitchStutterUntil = Date.now() + dur * 1000;
+    this.fourthWallGlitch();
+  }
+
+  transitionToBGM(trackName) {
+    if (this.currentTrack === trackName) return;
+    if (this.ensureContext() && !this.muted) {
+      this._scheduleCrash(this.ctx.currentTime + 0.01);
+    }
+    this.playBGM(trackName);
+  }
+
+  getVisualizerData(outArray) {
+    if (!outArray || !outArray.length) return outArray;
+    if (this.analyser && this.ctx && this.ctx.state === 'running' && !this.muted) {
+      this.analyser.getByteFrequencyData(outArray);
+      let sum = 0;
+      for (let i = 0; i < outArray.length; i++) sum += outArray[i];
+      if (sum > 0) return outArray;
+    }
+    // Synthesized reactive fallback when playing silently or previewing before interaction
+    const pulse = this.getBeatPulse();
+    const now = Date.now() * 0.006;
+    const base = this.currentTrack && !this.muted ? 42 + pulse * 140 : 12;
+    for (let i = 0; i < outArray.length; i++) {
+      const wave = 0.5 + 0.5 * Math.sin(now + i * 0.48);
+      outArray[i] = Math.min(255, Math.round(base * (0.35 + wave * 0.85)));
+    }
+    return outArray;
+  }
+
   // --- Procedural BGM Tracks ---
 
   playBGM(trackName) {
@@ -347,7 +493,8 @@ class SoundEngine {
 
     while (this.nextNoteTime < this.ctx.currentTime + 0.12) {
       this._playTrackStep(track, this.stepIndex, this.nextNoteTime);
-      const secPerStep = 60 / track.bpm / 4; // 16th note
+      const effBpm = track.bpm * this.tempoMult;
+      const secPerStep = 60 / effBpm / 4; // 16th note
       this.nextNoteTime += secPerStep;
       this.stepIndex = (this.stepIndex + 1) % track.length;
     }
@@ -355,34 +502,42 @@ class SoundEngine {
 
   _playTrackStep(track, idx, t) {
     if (this.muted) return;
-    const stepDur = (60 / track.bpm / 4) * 0.9;
+    const effBpm = track.bpm * this.tempoMult;
+    const stepDur = (60 / effBpm / 4) * 0.9;
+    const glitchWarp = Date.now() < this.glitchStutterUntil ? (idx % 2 === 0 ? 1.055 : 0.945) : 1.0;
 
     const lead = track.lead[idx];
     if (lead) {
-      const f = freq(lead);
+      const f = freq(lead) * glitchWarp;
       const dur = stepDur * (track.leadHold || 0.9);
-      this._scheduleOsc(f, dur, track.leadWave || 'sawtooth', 0.15, t);
+      const destNode = track.distortLead && this.guitarBus ? this.guitarBus : this.bgmGain;
+      this._scheduleOsc(f, dur, track.leadWave || 'sawtooth', 0.145, t, destNode);
       if (track.detuneLead) {
-        this._scheduleOsc(f * 1.003, dur * 0.95, 'square', 0.09, t);
+        this._scheduleOsc(f * 1.0035, dur * 0.95, 'square', 0.085, t, this.bgmGain);
       }
     }
 
     const counter = track.counter && track.counter[idx % track.counter.length];
     if (counter) {
-      this._scheduleOsc(freq(counter), stepDur * 0.92, 'triangle', 0.11, t);
+      this._scheduleOsc(freq(counter) * glitchWarp, stepDur * 0.92, 'triangle', 0.105, t, this.bgmGain);
     }
 
     const arp = track.arp && track.arp[idx % track.arp.length];
     if (arp) {
-      this._scheduleOsc(freq(arp), stepDur * 0.65, 'square', 0.085, t);
+      this._scheduleOsc(freq(arp) * glitchWarp, stepDur * 0.65, 'square', 0.08, t, this.bgmGain);
+    }
+
+    const pad = track.pad && track.pad[idx % track.pad.length];
+    if (pad) {
+      this._schedulePad(freq(pad) * glitchWarp, stepDur * 7.5, t);
     }
 
     const bass = track.bass && track.bass[idx % track.bass.length];
     if (bass) {
-      const bf = freq(bass);
-      this._scheduleOsc(bf, stepDur * 1.15, track.bassWave || 'sawtooth', 0.16, t);
+      const bf = freq(bass) * glitchWarp;
+      this._scheduleOsc(bf, stepDur * 1.15, track.bassWave || 'sawtooth', 0.155, t, this.bgmGain);
       if (track.subBass) {
-        this._scheduleOsc(bf * 0.5, stepDur * 1.25, 'triangle', 0.12, t);
+        this._scheduleOsc(bf * 0.5, stepDur * 1.25, 'triangle', 0.12, t, this.bgmGain);
       }
     }
 
@@ -390,6 +545,7 @@ class SoundEngine {
       const d = track.drums[idx % track.drums.length];
       if (d === 'K') {
         this._scheduleKick(t);
+        this.lastBeatTime = Date.now();
       } else if (d === 'S') {
         this._scheduleSnare(t);
       } else if (d === 'H') {
@@ -398,11 +554,14 @@ class SoundEngine {
         this._scheduleOpenHat(t);
       } else if (d === 'C') {
         this._scheduleCrash(t);
+        this.lastBeatTime = Date.now();
       }
+    } else if (idx % 8 === 0) {
+      this.lastBeatTime = Date.now();
     }
   }
 
-  _scheduleOsc(f, dur, wave, peak, t) {
+  _scheduleOsc(f, dur, wave, peak, t, destNode = null) {
     if (!f || !this.ctx) return;
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
@@ -412,9 +571,28 @@ class SoundEngine {
     g.gain.linearRampToValueAtTime(peak, t + 0.006);
     g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.03, dur));
     osc.connect(g);
-    g.connect(this.bgmGain);
+    g.connect(destNode || this.bgmGain);
     osc.start(t);
     osc.stop(t + Math.max(0.04, dur) + 0.01);
+  }
+
+  _schedulePad(f, dur, t) {
+    if (!f || !this.ctx) return;
+    const target = this.echoSend || this.bgmGain;
+    for (const ratio of [1, 1.498]) {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = ratio === 1 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(f * ratio, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(ratio === 1 ? 0.065 : 0.04, t + Math.min(0.08, dur * 0.25));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.12, dur));
+      osc.connect(g);
+      g.connect(target);
+      g.connect(this.bgmGain);
+      osc.start(t);
+      osc.stop(t + Math.max(0.14, dur) + 0.02);
+    }
   }
 
   _scheduleKick(t) {
@@ -676,6 +854,94 @@ const P4_BASS = [
   ...gallopBass('A1', 'D2')
 ];
 
+// Phase 5: "DARKER YET DARKER // UNBOUND" (176 BPM F# minor + Gaster Void Unbound Anthem)
+const P5_LEAD = [
+  'F#5', 'G#5', 'A5', 'C#6', 'F#6', null, 'E6', 'F#6', 'D6', 'C#6', 'B5', 'A5', 'G#5', 'A5', 'B5', 'C#6',
+  'F#5', 'A5', 'B5', 'D6', 'C#6', null, 'G6', null, 'F#6', 'F6', 'E6', 'D#6', 'D6', 'C#6', 'B5', 'G#5',
+  'A5', 'C#6', 'E6', 'F#6', 'E6', null, 'D6', 'C#6', 'B5', 'C#6', 'D6', 'E6', 'C#6', null, 'A5', null,
+  'G#5', 'B5', 'D6', 'F6', 'F#6', null, 'G#6', null, 'A6', 'G#6', 'F#6', 'E6', 'D6', 'C#6', 'B5', 'G#5',
+  // Gaster Theme Polychord Storm
+  'F#5', 'G5', 'D6', 'G5', 'F5', 'G5', 'D6', 'G5', 'E5', 'F#5', 'C#6', 'F#5', 'D5', 'F#5', 'B5', 'F#5',
+  'C#5', 'F#5', 'G#5', 'C#6', 'F6', null, 'C#6', 'G#5', 'A5', 'B5', 'C#6', 'D6', 'E6', null, 'G#6', null,
+  'F#6', 'F#6', 'A6', null, 'G#6', 'F#6', 'F6', 'F#6', 'D6', 'E6', 'F#6', 'G#6', 'A6', null, 'F#6', 'D6',
+  'C#6', 'F6', 'G#6', 'B6', 'A6', 'G#6', 'F#6', 'F6', 'F#6', null, 'C#6', null, 'F#5', null, null, null
+];
+
+const P5_COUNTER = [
+  'F#4', 'G4', 'D4', 'G4', 'F#4', 'G4', 'D4', 'G4', 'F4', 'G4', 'D4', 'G4', 'F4', 'G4', 'D4', 'G4',
+  'E4', 'F#4', 'C#4', 'F#4', 'E4', 'F#4', 'C#4', 'F#4', 'D4', 'F#4', 'B3', 'F#4', 'D4', 'F#4', 'B3', 'F#4',
+  'A4', 'C#5', 'E5', 'A5', 'F#4', 'A4', 'C#5', 'F#5', 'D4', 'F#4', 'B4', 'D5', 'C#4', 'F4', 'G#4', 'C#5',
+  'B3', 'D4', 'G#4', 'B4', 'C#4', 'F4', 'G#4', 'C#5', 'F#4', 'A4', 'C#5', 'F#5', 'C#4', 'F4', 'G#4', 'C#5',
+  'F#4', 'A4', 'D5', 'F#5', 'F4', 'A4', 'D5', 'F5', 'E4', 'G#4', 'C#5', 'E5', 'D4', 'F#4', 'B4', 'D5',
+  'C#4', 'F4', 'G#4', 'C#5', 'G#4', 'F4', 'C#4', 'F4', 'F#4', 'A4', 'C#5', 'F#5', 'G#4', 'B4', 'D5', 'G#5',
+  'D4', 'F#4', 'A4', 'D5', 'E4', 'G#4', 'B4', 'E5', 'B3', 'D4', 'F#4', 'B4', 'D4', 'F#4', 'B4', 'D5',
+  'C#4', 'F4', 'G#4', 'C#5', 'F5', 'G#5', 'C#6', 'B5', 'F#5', null, 'C#5', null, 'F#4', null, null, null
+];
+
+const P5_ARP = [
+  ...arp16('F#4', 'A4', 'C#5', 'F#5'),
+  ...arp16('F#4', 'G4', 'D5', 'F#5'),
+  ...arp16('A4', 'C#5', 'E5', 'A5'),
+  ...arp16('C#4', 'F4', 'G#4', 'C#5'),
+  ...arp16('F#4', 'G4', 'D5', 'F#5'),
+  ...arp16('C#4', 'G#4', 'C#5', 'F5'),
+  ...arp16('D4', 'A4', 'D5', 'F#5'),
+  ...arp16('C#4', 'G#4', 'F5', 'C#6')
+];
+
+const P5_BASS = [
+  ...gallopBass('F#2', 'F#3'),
+  ...gallopBass('E2', 'E3'),
+  ...gallopBass('D2', 'D3'),
+  ...gallopBass('C#2', 'C#3'),
+  ...gallopBass('F#2', 'C#3'),
+  ...gallopBass('C#2', 'G#2'),
+  ...gallopBass('D2', 'E2'),
+  ...gallopBass('C#2', 'F#2')
+];
+
+const P5_PAD = [
+  'F#3', null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+  'D3', null, null, null, null, null, null, null, 'C#3', null, null, null, null, null, null, null,
+  'A3', null, null, null, null, null, null, null, 'D3', null, null, null, 'C#3', null, null, null,
+  'B2', null, null, null, null, null, null, null, 'F#3', null, null, null, 'C#3', null, null, null
+];
+
+const TITLE_LEAD = [
+  'D4', null, 'A4', null, 'F4', null, 'E4', 'D4', 'C4', null, 'G4', null, 'E4', null, null, null,
+  'A#3', null, 'F4', null, 'D4', null, 'E4', 'F4', 'E4', null, 'C#4', null, 'A3', null, null, null,
+  'D4', null, 'F4', 'A4', 'D5', null, 'C5', 'A#4', 'A4', null, 'G4', null, 'F4', null, 'E4', null,
+  'D4', null, 'E4', null, 'C#4', null, 'A4', null, 'D5', null, null, null, null, null, null, null
+];
+
+const TITLE_BASS = [
+  'D2', null, null, null, 'A2', null, null, null, 'C2', null, null, null, 'G2', null, null, null,
+  'A#1', null, null, null, 'F2', null, null, null, 'A1', null, null, null, 'E2', null, null, null,
+  'D2', null, null, null, 'F2', null, null, null, 'G2', null, null, null, 'C3', null, null, null,
+  'A#1', null, null, null, 'A1', null, null, null, 'D2', null, null, null, null, null, null, null
+];
+
+const TITLE_PAD = [
+  'D3', null, null, null, null, null, null, null, 'C3', null, null, null, null, null, null, null,
+  'A#2', null, null, null, null, null, null, null, 'A2', null, null, null, null, null, null, null,
+  'D3', null, null, null, null, null, null, null, 'G3', null, null, null, null, null, null, null,
+  'A#2', null, null, null, 'A2', null, null, null, 'D3', null, null, null, null, null, null, null
+];
+
+const ECHO_LEAD = [
+  'E5', null, 'B4', null, 'G4', null, 'A4', null, 'B4', null, null, null, 'D5', null, 'C5', null,
+  'B4', null, 'G4', null, 'E4', null, null, null, 'F#4', null, 'G4', null, 'B4', null, null, null,
+  'E5', null, 'F#5', null, 'G5', null, 'F#5', null, 'E5', null, 'D5', null, 'B4', null, 'G4', null,
+  'C5', null, 'B4', null, 'A4', null, 'F#4', null, 'E4', null, null, null, null, null, null, null
+];
+
+const ECHO_ARP = [
+  ...arp16('E4', 'G4', 'B4', 'E5'),
+  ...arp16('G3', 'B3', 'D4', 'G4'),
+  ...arp16('C4', 'E4', 'G4', 'C5'),
+  ...arp16('B3', 'D#4', 'F#4', 'B4')
+];
+
 const OVERWORLD_LEAD = [
   'A4', null, null, null, 'E5', null, null, null, 'D5', null, null, null, 'C5', null, 'B4', null,
   'A4', null, null, null, 'C5', null, null, null, 'B4', null, null, null, 'G4', null, null, null,
@@ -697,31 +963,68 @@ const GAMEOVER_LEAD = [
   null, null, 'G4', null, null, 'E4', null, null, 'C4', null, null, null, null, null, null, null
 ];
 
-const ENDING_LEAD = [
-  'D4', null, 'F#4', null, 'A4', null, 'D5', null, 'C#5', null, 'B4', null, 'A4', null, null, null,
-  'G4', null, 'B4', null, 'D5', null, 'B4', null, 'A4', null, 'F#4', null, 'E4', null, null, null,
-  'D4', null, 'E4', null, 'F#4', null, 'A4', null, 'B4', null, 'A4', null, 'G4', null, 'E4', null,
-  'D4', null, null, null, 'F#4', null, null, null, 'D5', null, null, null, null, null, null, null
+const VICTORY_LEAD = [
+  'D5', null, 'F#5', null, 'A5', null, 'D6', null, 'C#6', null, 'B5', null, 'A5', null, null, null,
+  'G5', null, 'B5', null, 'D6', null, 'B5', null, 'A5', null, 'F#5', null, 'E5', null, null, null,
+  'D5', null, 'E5', null, 'F#5', null, 'A5', null, 'B5', null, 'A5', null, 'G5', null, 'E5', null,
+  'D5', null, 'A4', null, 'F#5', null, 'E5', null, 'D5', null, null, null, null, null, null, null
+];
+
+const VOID_PAD = [
+  'D3', null, null, null, null, null, null, null, 'C3', null, null, null, null, null, null, null,
+  'A#2', null, null, null, null, null, null, null, 'A2', null, null, null, null, null, null, null
 ];
 
 const TRACKS = {
+  title: {
+    title: 'MIDNIGHT OVERTURE',
+    subtitle: 'Title Theme · Twilight Cathedral',
+    bpm: 104,
+    length: TITLE_LEAD.length,
+    lead: TITLE_LEAD,
+    bass: TITLE_BASS,
+    pad: TITLE_PAD,
+    leadWave: 'triangle',
+    bassWave: 'triangle',
+    leadHold: 1.5,
+    drums: null
+  },
   overworld: {
-    bpm: 92,
+    title: 'TWILIGHT JUDGMENT HALL',
+    subtitle: 'Overworld · Empty Corridor',
+    bpm: 96,
     length: OVERWORLD_LEAD.length,
     lead: OVERWORLD_LEAD,
     bass: OVERWORLD_BASS,
+    pad: TITLE_PAD,
     leadWave: 'triangle',
     bassWave: 'triangle',
     leadHold: 1.8,
     drums: null
   },
+  echo_sanctum: {
+    title: 'ECHOES OF WATERFALL',
+    subtitle: 'Secret Room · Echo Flower Sanctum',
+    bpm: 92,
+    length: ECHO_LEAD.length,
+    lead: ECHO_LEAD,
+    arp: ECHO_ARP,
+    bass: OVERWORLD_BASS,
+    pad: ['E3', null, null, null, null, null, null, null, 'G3', null, null, null, 'C3', null, null, null],
+    leadWave: 'sine',
+    bassWave: 'triangle',
+    leadHold: 1.7,
+    drums: null
+  },
   phase1: {
     title: 'JUDGMENT OVERDRIVE',
+    subtitle: 'Phase 1 · Sans First Stand',
     bpm: 138,
     length: P1_LEAD.length,
     lead: P1_LEAD,
     arp: P1_ARP,
     bass: P1_BASS,
+    pad: VOID_PAD,
     leadWave: 'sawtooth',
     bassWave: 'sawtooth',
     detuneLead: true,
@@ -731,14 +1034,17 @@ const TRACKS = {
   },
   phase2: {
     title: 'CRIMSON VELOCITY',
+    subtitle: 'Phase 2 · Overdrive Counterattack',
     bpm: 150,
     length: P2_LEAD.length,
     lead: P2_LEAD,
     counter: P2_COUNTER,
     arp: P2_ARP,
     bass: P2_BASS,
+    pad: ['E3', null, null, null, null, null, null, null, 'D3', null, null, null, null, null, null, null],
     leadWave: 'sawtooth',
     bassWave: 'sawtooth',
+    distortLead: true,
     detuneLead: true,
     subBass: true,
     leadHold: 0.9,
@@ -746,13 +1052,16 @@ const TRACKS = {
   },
   phase3: {
     title: 'SHATTERED DAWN',
+    subtitle: 'Phase 3 · Void Fracture',
     bpm: 158,
     length: P3_LEAD.length,
     lead: P3_LEAD,
     counter: P3_COUNTER,
     bass: P3_BASS,
+    pad: ['C#3', null, null, null, null, null, null, null, 'B2', null, null, null, null, null, null, null],
     leadWave: 'sawtooth',
     bassWave: 'square',
+    distortLead: true,
     detuneLead: true,
     subBass: true,
     leadHold: 0.95,
@@ -760,39 +1069,85 @@ const TRACKS = {
   },
   phase4: {
     title: 'VOID ANOMALY // 666',
+    subtitle: 'Phase 4 · W.D. Gaster Dual Anomaly',
     bpm: 168,
     length: P4_LEAD.length,
     lead: P4_LEAD,
     counter: P4_COUNTER,
     arp: P4_ARP,
     bass: P4_BASS,
+    pad: VOID_PAD,
     leadWave: 'sawtooth',
     bassWave: 'sawtooth',
+    distortLead: true,
     detuneLead: true,
     subBass: true,
     leadHold: 0.95,
     drums: ['C', 'K', 'K', 'K', 'S', 'O', 'K', 'K', 'C', 'K', 'S', 'K', 'K', 'O', 'S', 'S']
   },
+  phase5: {
+    title: 'DARKER YET DARKER // UNBOUND',
+    subtitle: 'Phase 5 · Secret True Boss',
+    bpm: 176,
+    length: P5_LEAD.length,
+    lead: P5_LEAD,
+    counter: P5_COUNTER,
+    arp: P5_ARP,
+    bass: P5_BASS,
+    pad: P5_PAD,
+    leadWave: 'sawtooth',
+    bassWave: 'sawtooth',
+    distortLead: true,
+    detuneLead: true,
+    subBass: true,
+    leadHold: 0.95,
+    drums: ['C', 'K', 'K', 'K', 'S', 'K', 'K', 'O', 'C', 'K', 'S', 'K', 'K', 'O', 'S', 'S']
+  },
+  victory: {
+    title: 'FIRST LIGHT OF DAWN',
+    subtitle: 'Victory · Surface Horizon',
+    bpm: 116,
+    length: VICTORY_LEAD.length,
+    lead: VICTORY_LEAD,
+    bass: OVERWORLD_BASS,
+    pad: ['D3', null, null, null, null, null, null, null, 'G3', null, null, null, 'A3', null, null, null],
+    leadWave: 'triangle',
+    bassWave: 'triangle',
+    leadHold: 1.9,
+    drums: ['K', null, 'H', null, 'S', null, 'H', null]
+  },
   gameover: {
-    bpm: 84,
+    title: 'SHATTERED DETERMINATION',
+    subtitle: 'Game Over · Stay Determined',
+    bpm: 74,
     length: GAMEOVER_LEAD.length,
     lead: GAMEOVER_LEAD,
     bass: OVERWORLD_BASS,
+    pad: TITLE_PAD,
     leadWave: 'triangle',
     bassWave: 'triangle',
     leadHold: 2.2,
     drums: null
-  },
-  ending: {
-    bpm: 88,
-    length: ENDING_LEAD.length,
-    lead: ENDING_LEAD,
-    bass: OVERWORLD_BASS,
-    leadWave: 'triangle',
-    bassWave: 'triangle',
-    leadHold: 2.0,
-    drums: null
   }
 };
+TRACKS.ending = TRACKS.victory;
+
+export const TRACK_CATALOG = [
+  'title',
+  'overworld',
+  'echo_sanctum',
+  'phase1',
+  'phase2',
+  'phase3',
+  'phase4',
+  'phase5',
+  'victory',
+  'gameover'
+].map((id) => ({
+  id,
+  title: TRACKS[id].title,
+  subtitle: TRACKS[id].subtitle,
+  bpm: TRACKS[id].bpm
+}));
 
 export const audio = new SoundEngine();

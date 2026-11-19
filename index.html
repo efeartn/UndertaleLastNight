@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>UNDERTALE: LAST NIGHT</title>
   <meta name="description" content="Playable 4-phase Undertale fan game with 16 non-repeating attacks, original 138-168 BPM Web Audio OST, Twilight Antechamber, and W.D. Gaster 4th-wall breaks.">
   <meta name="theme-color" content="#050508">
@@ -50,13 +50,20 @@
           <button id="btnJumpP2" class="hud-btn hud-btn-sm" type="button" title="Jump to Phase 2">P2</button>
           <button id="btnJumpP3" class="hud-btn hud-btn-sm" type="button" title="Jump to Phase 3">P3</button>
           <button id="btnJumpP4" class="hud-btn hud-btn-sm" type="button" title="Jump to Phase 4 (Void Fracture)">P4</button>
-          <button id="btnAttackSelect" class="hud-btn hud-btn-sm" type="button" title="Browse & Practice All 16 Attacks">🎯 Attacks</button>
-          <button id="btnBossRush" class="hud-btn hud-btn-sm" type="button" title="Fight All 16 Attacks Back-to-Back">🔥 Rush</button>
-          <button id="btnEndless" class="hud-btn hud-btn-sm" type="button" title="Endless Survival Mode (Phases 2-4)">∞ Endless</button>
+          <button id="btnJumpP5" class="hud-btn hud-btn-sm" type="button" title="Jump to Secret Phase 5 (Gaster Unbound)">P5</button>
+          <button id="btnAttackSelect" class="hud-btn hud-btn-sm" type="button" title="Browse & Practice All 20 Attacks">🎯 Attacks</button>
+          <button id="btnBossRush" class="hud-btn hud-btn-sm" type="button" title="Fight All 20 Attacks Back-to-Back">🔥 Rush</button>
+          <button id="btnEndless" class="hud-btn hud-btn-sm" type="button" title="Endless Survival Mode (Phases 2-5)">∞ Endless</button>
         </div>
 
-        <button id="btnAchievements" class="hud-btn" type="button" title="View Unlocked Trophies">🏆 Trophies (<span id="achCount">0/8</span>)</button>
+        <button id="btnJukebox" class="hud-btn hud-btn-sm" type="button" title="Open Sound Test & Live Visualizer">🎵 Jukebox</button>
+        <button id="btnModifiers" class="hud-btn hud-btn-sm" type="button" title="Challenge Modifiers, SOUL Skins & Endless Leaderboard">⚡ Mods</button>
+        <button id="btnAchievements" class="hud-btn" type="button" title="View Unlocked Trophies">🏆 Trophies (<span id="achCount">0/12</span>)</button>
         <button id="btnFullscreen" class="hud-btn" type="button" title="Fullscreen">⛶</button>
+      </div>
+      <div class="mobile-header-actions" aria-label="Mobile quick controls">
+        <button id="btnMobileMute" class="hud-btn hud-btn-sm" type="button" aria-label="Toggle Audio">🔊</button>
+        <button id="btnMobileMenu" class="hud-btn hud-btn-sm" type="button" aria-label="Open Game Menu">☰ Menu</button>
       </div>
     </header>
 
@@ -67,30 +74,118 @@
       </div>
 
       <div class="controls-strip">
-        <span><strong>Move / Aim Shield:</strong> Arrows / WASD</span>
-        <span><strong>Confirm / Shoot / Charge Shot:</strong> Z / Enter (Hold for Big Shot)</span>
-        <span><strong>Back / Skip:</strong> X / Shift</span>
+        <span><strong>Move / Web / Shield:</strong> Arrows / WASD</span>
+        <span><strong>Confirm / Shoot / Big Shot:</strong> Z / Enter</span>
+        <span><strong>Dash / Back:</strong> X / Shift</span>
         <span><strong>Menu:</strong> C / Esc</span>
-        <span><strong>Mouse:</strong> Click Menus &amp; Buttons</span>
+        <span><strong>Mouse:</strong> Click Menus</span>
       </div>
 
-      <!-- Touch / Mouse Fallback Pad -->
-      <div class="touch-controls" aria-label="On-screen controls">
-        <div class="dpad">
-          <button class="pad-btn pad-up" data-key="ArrowUp" type="button">▲</button>
-          <div class="dpad-mid">
-            <button class="pad-btn pad-left" data-key="ArrowLeft" type="button">◀</button>
-            <button class="pad-btn pad-down" data-key="ArrowDown" type="button">▼</button>
-            <button class="pad-btn pad-right" data-key="ArrowRight" type="button">▶</button>
+      <!-- Handheld Touch / Virtual Joystick & D-Pad Deck -->
+      <div class="touch-controls" aria-label="Handheld touch controls">
+        <div class="deck-left">
+          <button id="btnPadSwap" class="pad-swap-btn" type="button" title="Switch Stick / D-Pad">🕹 Stick</button>
+          <div id="virtualStick" class="vstick-base" aria-label="Virtual Thumbstick">
+            <div id="vstickNub" class="vstick-nub"></div>
+          </div>
+          <div id="classicDpad" class="dpad hidden" aria-label="Classic D-Pad">
+            <button class="pad-btn pad-up" data-key="ArrowUp" type="button">▲</button>
+            <div class="dpad-mid">
+              <button class="pad-btn pad-left" data-key="ArrowLeft" type="button">◀</button>
+              <button class="pad-btn pad-down" data-key="ArrowDown" type="button">▼</button>
+              <button class="pad-btn pad-right" data-key="ArrowRight" type="button">▶</button>
+            </div>
           </div>
         </div>
-        <div class="action-buttons">
-          <button class="act-btn act-z" data-key="KeyZ" type="button">Z<small>OK</small></button>
-          <button class="act-btn act-x" data-key="KeyX" type="button">X<small>BACK</small></button>
+        <div class="deck-right action-buttons">
+          <button class="act-btn act-z" data-key="KeyZ" type="button">Z<small>OK/SHOT</small></button>
+          <button class="act-btn act-x" data-key="KeyX" type="button">X<small>DASH</small></button>
           <button class="act-btn act-c" data-key="KeyC" type="button">C<small>MENU</small></button>
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Mobile Slide-Out Command Drawer -->
+  <div id="mobileDrawer" class="drawer-backdrop hidden" role="dialog" aria-modal="true" aria-label="Mobile game menu">
+    <div class="drawer-panel">
+      <div class="modal-header">
+        <h2>⚡ HANDHELD MENU</h2>
+        <button id="btnCloseDrawer" class="hud-btn hud-btn-sm" type="button" aria-label="Close">✕</button>
+      </div>
+      <div class="drawer-section">
+        <div class="drawer-title">PLAY MODES</div>
+        <div class="drawer-grid">
+          <button class="hud-btn" data-drawer-trigger="btnJumpOverworld" type="button">🏛 Hall</button>
+          <button class="hud-btn" data-drawer-trigger="btnJumpP1" type="button">Phase 1</button>
+          <button class="hud-btn" data-drawer-trigger="btnJumpP2" type="button">Phase 2</button>
+          <button class="hud-btn" data-drawer-trigger="btnJumpP3" type="button">Phase 3</button>
+          <button class="hud-btn" data-drawer-trigger="btnJumpP4" type="button">Phase 4</button>
+          <button class="hud-btn" data-drawer-trigger="btnJumpP5" type="button">⚡ Phase 5</button>
+          <button class="hud-btn" data-drawer-trigger="btnAttackSelect" type="button">🎯 Attacks</button>
+          <button class="hud-btn" data-drawer-trigger="btnBossRush" type="button">🔥 Rush</button>
+          <button class="hud-btn" data-drawer-trigger="btnEndless" type="button">∞ Endless</button>
+        </div>
+      </div>
+      <div class="drawer-section">
+        <div class="drawer-title">FEATURES &amp; VISUALS</div>
+        <div class="drawer-grid">
+          <button class="hud-btn" data-drawer-trigger="btnJukebox" type="button">🎵 Jukebox</button>
+          <button class="hud-btn" data-drawer-trigger="btnModifiers" type="button">⚡ Mods &amp; Skins</button>
+          <button class="hud-btn" data-drawer-trigger="btnAchievements" type="button">🏆 Trophies</button>
+          <button class="hud-btn" data-drawer-trigger="btnCRT" type="button">📺 CRT</button>
+          <button class="hud-btn" data-drawer-trigger="btnAssist" type="button">🛡 Assist</button>
+          <button class="hud-btn" data-drawer-trigger="btnFullscreen" type="button">⛶ Fullscreen</button>
+        </div>
+      </div>
+      <div class="drawer-section">
+        <div class="drawer-title">TOUCH CONTROLS &amp; AUDIO</div>
+        <div class="drawer-row">
+          <button id="btnDrawerPadSwap" class="hud-btn" type="button">Pad: Virtual Joystick</button>
+          <button class="hud-btn" data-drawer-trigger="btnMute" type="button">🔊 Audio Mute</button>
+        </div>
+        <label class="vol-wrap drawer-vol">
+          <span>VOLUME</span>
+          <input id="rngMobileVolume" type="range" min="0" max="100" value="72" aria-label="Mobile Master Volume">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sound Test / Jukebox Modal -->
+  <div id="jukeboxModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="jukeboxModalTitle">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="jukeboxModalTitle">🎵 SOUND TEST // JUKEBOX OST (10)</h2>
+        <button id="btnCloseJukebox" class="hud-btn hud-btn-sm" type="button" aria-label="Close">✕</button>
+      </div>
+      <div id="jukeboxNowPlaying" class="ach-summary">Select a track to play live synthesized audio.</div>
+      <canvas id="jukeboxViz" class="jukebox-viz" width="520" height="84"></canvas>
+      <div class="jukebox-toolbar">
+        <button id="btnJukeboxStop" class="hud-btn hud-btn-sm" type="button">⏹ Stop BGM</button>
+        <label class="vol-wrap">
+          <span>TEMPO <strong id="jukeboxTempoLabel">1.00x</strong></span>
+          <input id="rngJukeboxTempo" type="range" min="75" max="140" value="100" aria-label="Music Tempo">
+        </label>
+      </div>
+      <div id="jukeboxGrid" class="jukebox-grid"></div>
+    </div>
+  </div>
+
+  <!-- Challenge Modifiers, SOUL Skins & Endless Leaderboard Modal -->
+  <div id="modifiersModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modifiersModalTitle">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="modifiersModalTitle">⚡ MODIFIERS, SOUL SKINS &amp; ENDLESS TOP 5</h2>
+        <button id="btnCloseModifiers" class="hud-btn hud-btn-sm" type="button" aria-label="Close">✕</button>
+      </div>
+      <div class="mod-section-title">CHALLENGE MODIFIERS</div>
+      <div id="modifiersGrid" class="mod-grid"></div>
+      <div class="mod-section-title">SOUL AURA SKINS</div>
+      <div id="skinsGrid" class="skin-grid"></div>
+      <div class="mod-section-title">ENDLESS LEADERBOARD (LOCAL TOP 5)</div>
+      <div id="leaderboardList" class="leaderboard-list"></div>
+    </div>
   </div>
 
   <!-- Trophies & Achievements Modal -->

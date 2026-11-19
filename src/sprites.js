@@ -284,6 +284,15 @@ const SOUL_SHARD_GRID = [
   '..dd....'
 ];
 
+export const SOUL_SKINS = {
+  classic: { id: 'classic', name: 'Classic Soul', trim: null, core: null, desc: 'Pure Determination.' },
+  void_prism: { id: 'void_prism', name: 'Void Prism', trim: '#2ce8f5', altTrim: '#c084fc', desc: 'Shifting cyan/violet prism rim.' },
+  golden_dawn: { id: 'golden_dawn', name: 'Golden Dawn', trim: '#ffef3f', altTrim: '#fde047', desc: 'Judgment Hall sunlight aura.' },
+  cyber_cyan: { id: 'cyber_cyan', name: 'Cyber Holo', trim: '#38bdf8', altTrim: '#ffffff', desc: 'Crisp neon wireframe trim.' },
+  crimson_flame: { id: 'crimson_flame', name: 'Crimson Flame', trim: '#fb923c', altTrim: '#ef4444', desc: 'Burning ember ring.' },
+  gaster_mono: { id: 'gaster_mono', name: 'Void Mono', trim: '#e2e8f0', altTrim: '#a855f7', desc: 'Gaster Secret Vault emblem.' }
+};
+
 export function drawSoul(ctx, x, y, mode = 'red', options = {}) {
   const {
     gravity = 'down',
@@ -293,7 +302,10 @@ export function drawSoul(ctx, x, y, mode = 'red', options = {}) {
     flash = false,
     cracked = false,
     splitOffset = 0,
-    grazeFlash = false
+    grazeFlash = false,
+    skin = 'classic',
+    dashing = false,
+    dashReady = false
   } = options;
 
   const colorMap = {
@@ -301,6 +313,7 @@ export function drawSoul(ctx, x, y, mode = 'red', options = {}) {
     blue: '#003cff',
     green: '#22e646',
     yellow: '#ffef3f',
+    purple: '#d946ef',
     cyan: '#2ce8f5',
     orange: '#ffa024'
   };
@@ -313,6 +326,26 @@ export function drawSoul(ctx, x, y, mode = 'red', options = {}) {
   ctx.translate(Math.round(x), Math.round(y));
 
   if (scale !== 1) ctx.scale(scale, scale);
+
+  // Dash glow / active i-frame aura
+  if (dashing && !cracked) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.fillRect(-10, -9, 20, 18);
+    ctx.fillStyle = 'rgba(44, 232, 245, 0.4)';
+    ctx.fillRect(-12, -7, 24, 14);
+  } else if (dashReady && skin && skin !== 'classic' && SOUL_SKINS[skin]?.trim && !cracked) {
+    const sk = SOUL_SKINS[skin];
+    const now = typeof performance !== 'undefined' ? performance.now() * 0.006 : 0;
+    const pulse = Math.sin(now) > 0 ? sk.trim : (sk.altTrim || sk.trim);
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.65;
+    ctx.fillStyle = pulse;
+    ctx.fillRect(-9, -8, 18, 2);
+    ctx.fillRect(-9, 6, 18, 2);
+    ctx.fillRect(-10, -6, 2, 12);
+    ctx.fillRect(8, -6, 2, 12);
+    ctx.restore();
+  }
 
   // Green Shield Bar rendered around the SOUL before heart rotation
   if (mode === 'green') {
@@ -373,9 +406,30 @@ export function drawSoul(ctx, x, y, mode = 'red', options = {}) {
     if (spr) {
       ctx.drawImage(spr, -8, -7);
     }
+    if (mode === 'purple' && !flash) {
+      ctx.fillStyle = '#fae8ff';
+      ctx.fillRect(-5, -4, 2, 2);
+    }
   }
 
   ctx.restore();
+}
+
+export function drawSoulTrail(ctx, trailPoints, mode = 'red', options = {}) {
+  if (!trailPoints || !trailPoints.length) return;
+  const { gravity = 'down', skin = 'classic' } = options;
+  for (let i = 0; i < trailPoints.length; i++) {
+    const pt = trailPoints[i];
+    if (pt.life <= 0) continue;
+    const ratio = Math.max(0, Math.min(1, pt.life / (pt.maxLife || 0.24)));
+    drawSoul(ctx, pt.x, pt.y, pt.mode || mode, {
+      gravity: pt.gravity || gravity,
+      alpha: ratio * 0.42,
+      scale: 0.92 + ratio * 0.08,
+      flash: Boolean(pt.dashing && i % 2 === 0),
+      skin
+    });
+  }
 }
 
 export function drawSoulShard(ctx, x, y, rot, color = '#ff1e1e') {
@@ -1042,6 +1096,16 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
     ctx.drawImage(torsoSpr, torsoX, ty);
   }
 
+  // Animated hoodie hem & collar flutter in high-intensity phases
+  if (phase >= 2 && !isSleeping) {
+    const flutter = Math.round(Math.sin(time * 9.5) * 2);
+    ctx.fillStyle = '#1b50a8';
+    ctx.fillRect(torsoX + 4, ty + 44, 6, 4 + (flutter > 0 ? 2 : 0));
+    ctx.fillRect(torsoX + 62, ty + 44, 6, 4 + (flutter < 0 ? 2 : 0));
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(torsoX + 18 + (flutter > 0 ? 2 : 0), ty + 2, 4, 4);
+  }
+
   // Pose-specific extended pixel-grid limbs (snapped cleanly to 2x grid)
   if (pose === 'shrug') {
     const lh = drawPixelGrid(SANS_SHRUG_HAND_LEFT, SANS_PAL, scale, 'sans-shrug-l');
@@ -1457,17 +1521,26 @@ export function drawGasterBlaster(
   ctx.rotate(angle);
   if (scale !== 1) ctx.scale(scale, scale);
 
-  // Pixelated dashed warning sightline while charging
+  // Pixelated dashed warning sightline & orbiting charge sparks while charging
   if (!beamActive && charging > 0) {
     ctx.save();
     ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(0.85, 0.22 + charging * 0.45)})`;
     for (let dy = 14; dy < beamLen; dy += 16) {
       ctx.fillRect(-1, dy, 2, 8);
     }
+    const now = typeof performance !== 'undefined' ? performance.now() * 0.012 : 0;
+    const radius = Math.max(4, (1 - Math.min(1, charging)) * 22 + 6);
+    for (let i = 0; i < 4; i++) {
+      const a = now + i * (Math.PI / 2);
+      const sx = Math.round(Math.cos(a) * radius);
+      const sy = Math.round(14 + Math.sin(a) * radius * 0.55);
+      ctx.fillStyle = i % 2 === 0 ? '#2ce8f5' : '#ffffff';
+      ctx.fillRect(sx - 2, sy - 2, 4, 4);
+    }
     ctx.restore();
   }
 
-  // Pixelated beam core + outer dither glow along local +Y
+  // Pixelated beam core + outer dither glow + plasma crackle along local +Y
   if (beamActive) {
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const pulseStep = Math.sin(now * 0.04) > 0 ? 2 : 0;
@@ -1496,6 +1569,13 @@ export function drawGasterBlaster(
     // Pure white pixelated core
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(-coreHalf, 10, coreHalf * 2, beamLen);
+
+    // High-voltage plasma zigzags inside the beam
+    ctx.fillStyle = '#e0ffff';
+    for (let by = 24; by < Math.min(beamLen, 720); by += 28) {
+      const zig = Math.sin(now * 0.05 + by * 0.1) > 0 ? 1 : -1;
+      ctx.fillRect(zig * (coreHalf - 3), by, 4, 8);
+    }
 
     // Stepped pixel muzzle flare at mouth origin
     ctx.fillStyle = '#ffffff';
@@ -1562,6 +1642,13 @@ const BONE_PALETTES = {
     sh: '#c99e0e',
     out: '#07070c',
     crack: '#1c1304'
+  },
+  purple: {
+    fill: '#e879f9',
+    hi: '#fae8ff',
+    sh: '#9333ea',
+    out: '#07070c',
+    crack: '#2e1065'
   }
 };
 
@@ -2625,5 +2712,277 @@ export function drawJudgmentHallForegroundPillars(ctx, camX) {
       ctx.drawImage(pillarSpr, sx - 24, 0, 48, 480);
     }
   }
+  ctx.restore();
+}
+
+// ============================================================================
+// 13. V2.0 EXPANSION: GASTER UNBOUND, DYNAMIC BATTLE BACKDROPS & NEW PROPS
+// ============================================================================
+
+const ECHO_FLOWER_GRID = [
+  '....BBBB....',
+  '..BBLLLLBB..',
+  '.BLCCCCCCLB.',
+  '.BLCWCCWCLB.',
+  '..BCCCCCCB..',
+  '...BBBBBB...',
+  '.....GG.....',
+  '....GGGG....',
+  '...GG..GG...',
+  '.....GG.....',
+  '....GGGG....'
+];
+
+const ECHO_PAL = {
+  B: '#1d4ed8',
+  L: '#38bdf8',
+  C: '#7dd3fc',
+  W: '#e0f2fe',
+  G: '#22c55e'
+};
+
+export function drawEchoFlower(ctx, x, y, time = 0, glowing = false) {
+  const spr = drawPixelGrid(ECHO_FLOWER_GRID, ECHO_PAL, 2, 'prop-echo-flower');
+  const bob = Math.round(Math.sin(time * 2.6 + x * 0.05) * 1.5);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (glowing) {
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
+    ctx.fillRect(Math.round(x - 16), Math.round(y - 26 + bob), 32, 24);
+  }
+  if (spr) {
+    ctx.drawImage(spr, Math.round(x - 12), Math.round(y - 22 + bob));
+  }
+  ctx.restore();
+}
+
+export function drawVoidDoor(ctx, x, y, time = 0, unlocked = false) {
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  const gx = Math.round(x - 24);
+  const gy = Math.round(y - 78);
+  const pulse = 0.5 + 0.5 * Math.sin(time * 3.5);
+  // Subtle eerie aura behind the grey door
+  ctx.fillStyle = unlocked
+    ? `rgba(217, 70, 239, ${0.22 + pulse * 0.2})`
+    : `rgba(148, 163, 184, ${0.14 + pulse * 0.12})`;
+  ctx.fillRect(gx - 6, gy - 6, 60, 86);
+  // Crisp grey door frame & panels (authentic Undertale mystery door vibe)
+  ctx.fillStyle = '#090910';
+  ctx.fillRect(gx - 2, gy - 2, 52, 82);
+  ctx.fillStyle = unlocked ? '#c4b5fd' : '#9ca3af';
+  ctx.fillRect(gx, gy, 48, 78);
+  ctx.fillStyle = '#1f2937';
+  ctx.fillRect(gx + 6, gy + 6, 36, 26);
+  ctx.fillRect(gx + 6, gy + 38, 36, 32);
+  ctx.fillStyle = '#06060b';
+  ctx.fillRect(gx + 10, gy + 10, 28, 18);
+  ctx.fillRect(gx + 10, gy + 42, 28, 24);
+  // Glowing palm hole crest & doorknob
+  ctx.fillStyle = unlocked ? '#e879f9' : '#e5e7eb';
+  ctx.fillRect(gx + 34, gy + 35, 4, 4);
+  ctx.fillStyle = unlocked ? '#2ce8f5' : '#64748b';
+  ctx.fillRect(gx + 21, gy + 16, 6, 8);
+  ctx.restore();
+}
+
+export function drawSoulShrine(ctx, x, y, time = 0) {
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  const sx = Math.round(x);
+  const sy = Math.round(y);
+  const float = Math.round(Math.sin(time * 3.2) * 3);
+  ctx.fillStyle = '#07070c';
+  ctx.fillRect(sx - 20, sy - 20, 40, 22);
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(sx - 18, sy - 18, 36, 18);
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(sx - 14, sy - 16, 28, 4);
+  ctx.fillStyle = 'rgba(217, 70, 239, 0.25)';
+  ctx.fillRect(sx - 16, sy - 46 + float, 32, 24);
+  drawSoul(ctx, sx, sy - 34 + float, 'purple', { scale: 1.15, skin: 'void_prism', dashReady: true });
+  ctx.restore();
+}
+
+export function drawGasterUnbound(ctx, cx, baseY, options = {}) {
+  const {
+    time = 0,
+    phase = 5,
+    flashAlpha = 0,
+    hurtShake = 0,
+    beatPulse = 0
+  } = options;
+
+  const shakeX = hurtShake > 0 ? (Math.random() - 0.5) * hurtShake : 0;
+  const x = Math.round(cx + shakeX);
+  const floatY = Math.round(Math.sin(time * 2.4) * 5);
+  const y = Math.round(baseY + floatY);
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+
+  // 1. Rotating arcane rune ring behind Gaster Unbound
+  const runeRadius = 56 + beatPulse * 8;
+  for (let i = 0; i < 8; i++) {
+    const ang = time * 0.9 + (i * Math.PI) / 4;
+    const rx = Math.round(x + Math.cos(ang) * runeRadius);
+    const ry = Math.round(y - 68 + Math.sin(ang) * (runeRadius * 0.42));
+    ctx.fillStyle = i % 2 === 0 ? '#d946ef' : '#2ce8f5';
+    ctx.globalAlpha = 0.55 + beatPulse * 0.35;
+    ctx.fillRect(rx - 3, ry - 3, 6, 6);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(rx - 1, ry - 1, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+
+  // 2. Waving dark void tendrils along lower cloak
+  for (let i = -3; i <= 3; i++) {
+    const sway = Math.round(Math.sin(time * 5.2 + i * 1.1) * 6);
+    ctx.fillStyle = Math.abs(i) % 2 === 0 ? '#110c21' : '#28194a';
+    ctx.fillRect(x + i * 10 - 4 + sway, y - 36, 8, 34 + (i % 2 === 0 ? 4 : 0));
+    ctx.fillStyle = '#a855f7';
+    ctx.fillRect(x + i * 10 - 2 + sway, y - 6, 4, 4);
+  }
+
+  // 3. Towering Cloak & Asymmetric Cracked Skull (scaled slightly larger than Phase 3/4 overlay)
+  const bodySpr = drawPixelGrid(GASTER_CRACKED_BODY, GASTER_PAL, 3, 'gaster-body-v1');
+  if (bodySpr) {
+    ctx.drawImage(bodySpr, x - 48, y - 144);
+  }
+
+  // Intense Phase 5 glowing void eyes & crack lightning
+  const flicker = Math.sin(time * 22) > 0;
+  ctx.fillStyle = flicker ? '#2ce8f5' : '#e879f9';
+  ctx.fillRect(x - 14, y - 118, 4, 6);
+  ctx.fillRect(x + 10, y - 116, 4, 4);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x - 13, y - 116, 2, 2);
+  ctx.fillRect(x + 11, y - 115, 2, 2);
+
+  // 4. Six floating skeletal Gaster hands with glowing palm holes
+  const lSpr = drawPixelGrid(GASTER_HAND_LEFT, GASTER_PAL, 2, 'gaster-hand-l');
+  const rSpr = drawPixelGrid(GASTER_HAND_RIGHT, GASTER_PAL, 2, 'gaster-hand-r');
+  for (let row = 0; row < 3; row++) {
+    const fanAngle = (row - 1) * 0.45 + Math.sin(time * 2.5 + row) * 0.15;
+    const dist = 78 + row * 18 + beatPulse * 6;
+    const hy = y - 78 + (row - 1) * 32 + Math.round(Math.cos(time * 3.1 + row) * 4);
+    const lx = Math.round(x - dist + Math.sin(fanAngle) * 6);
+    const rx = Math.round(x + dist - Math.sin(fanAngle) * 6);
+
+    for (const [spr, hx, clr] of [
+      [lSpr, lx, row % 2 === 0 ? '#e879f9' : '#2ce8f5'],
+      [rSpr, rx, row % 2 === 0 ? '#2ce8f5' : '#e879f9']
+    ]) {
+      ctx.fillStyle = clr;
+      ctx.globalAlpha = 0.65 + beatPulse * 0.3;
+      ctx.fillRect(hx - 4, hy - 4, 8, 8);
+      ctx.globalAlpha = 1;
+      if (spr) ctx.drawImage(spr, hx - 16, hy - 18, 32, 36);
+    }
+  }
+
+  // White flash silhouette on hit
+  if (flashAlpha > 0 && bodySpr) {
+    const whitePal = makeWhiteSilhouettePalette(GASTER_PAL);
+    const wBody = drawPixelGrid(GASTER_CRACKED_BODY, whitePal, 3, 'gaster-w-body');
+    if (wBody) {
+      ctx.globalAlpha = Math.min(1, flashAlpha);
+      ctx.drawImage(wBody, x - 48, y - 144);
+    }
+  }
+
+  ctx.restore();
+}
+
+export function drawBattleBackdrop(ctx, options = {}) {
+  const {
+    phase = 1,
+    time = 0,
+    beatPulse = 0,
+    width = 640,
+    height = 480
+  } = options;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+
+  // Base Obsidian Backdrop
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, width, height);
+
+  if (phase === 1) {
+    // Twilight Judgment Hall stained-glass warm gold shafts
+    ctx.fillStyle = 'rgba(255, 220, 110, 0.045)';
+    for (let i = 0; i < 4; i++) {
+      const x0 = 60 + i * 165;
+      ctx.beginPath();
+      ctx.moveTo(x0, 0);
+      ctx.lineTo(x0 + 54, 0);
+      ctx.lineTo(x0 - 20, 260);
+      ctx.lineTo(x0 - 74, 260);
+      ctx.closePath();
+      ctx.fill();
+    }
+  } else if (phase === 2) {
+    // Crimson Velocity storm + rising ember sparks
+    const grad = ctx.createLinearGradient(0, 0, 0, 260);
+    grad.addColorStop(0, `rgba(180, 30, 30, ${0.12 + beatPulse * 0.08})`);
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, 260);
+
+    for (let i = 0; i < 18; i++) {
+      const cy = ((time * (28 + (i % 4) * 11) + i * 37) % 240);
+      const px = Math.round(((i * 97 + Math.sin(time * 2 + i) * 18) % width) / 2) * 2;
+      const py = Math.round((240 - cy) / 2) * 2;
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(251, 146, 60, 0.35)' : 'rgba(248, 113, 113, 0.28)';
+      ctx.fillRect(px, py, 2, 4);
+    }
+  } else if (phase === 3 || phase === 4) {
+    // Void Fracture glowing sky fissures & chromatic pulses
+    const grad = ctx.createLinearGradient(0, 0, 0, 260);
+    grad.addColorStop(0, phase >= 4 ? `rgba(126, 34, 206, ${0.18 + beatPulse * 0.14})` : `rgba(34, 211, 238, ${0.14 + beatPulse * 0.1})`);
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, 260);
+
+    // Jagged Void Sky Cracks
+    ctx.fillStyle = phase >= 4 ? `rgba(192, 132, 252, ${0.22 + beatPulse * 0.2})` : 'rgba(44, 232, 245, 0.22)';
+    for (let k = 0; k < 5; k++) {
+      const bx = 70 + k * 125;
+      for (let step = 0; step < 6; step++) {
+        ctx.fillRect(bx + ((step % 2) * 6 - 3), step * 16 + 14, 2, 14);
+      }
+    }
+  } else {
+    // Phase 5: DARKER YET DARKER — Scrolling parallax monoliths & Void cathedral arches
+    const bgGlow = ctx.createRadialGradient(320, 120, 18, 320, 130, 340);
+    bgGlow.addColorStop(0, `rgba(217, 70, 239, ${0.22 + beatPulse * 0.18})`);
+    bgGlow.addColorStop(0.55, `rgba(44, 232, 245, ${0.08 + beatPulse * 0.06})`);
+    bgGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = bgGlow;
+    ctx.fillRect(0, 0, width, height);
+
+    const scroll = (time * 32) % 160;
+    for (let col = -1; col < 6; col++) {
+      const mx = Math.round(col * 160 - scroll);
+      ctx.fillStyle = 'rgba(24, 14, 48, 0.65)';
+      ctx.fillRect(mx, 0, 34, 240);
+      ctx.fillStyle = `rgba(217, 70, 239, ${0.25 + beatPulse * 0.25})`;
+      ctx.fillRect(mx, 0, 2, 240);
+      ctx.fillRect(mx + 32, 0, 2, 240);
+    }
+
+    // Subtle rising void rune sparkles
+    for (let i = 0; i < 20; i++) {
+      const cy = ((time * 36 + i * 41) % 240);
+      const px = Math.round(((i * 71 + Math.sin(time * 2.4 + i) * 14) % width) / 2) * 2;
+      const py = Math.round((240 - cy) / 2) * 2;
+      ctx.fillStyle = i % 2 === 0 ? '#e879f9' : '#2ce8f5';
+      ctx.globalAlpha = 0.45 * (1 - cy / 240);
+      ctx.fillRect(px, py, 2, 2);
+    }
+  }
+
   ctx.restore();
 }
