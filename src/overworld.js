@@ -124,14 +124,16 @@ export const ARMORS = {
 };
 
 export const DEFAULT_INVENTORY = () => [
-  { name: 'B.Scotch Pie', heal: 99, desc: 'All HP restored. Still warm from Toriel.' },
-  { name: 'Instant Noodles', heal: 90, desc: 'They are better dry. Restored 90 HP.' },
-  { name: 'Face Steak', heal: 60, desc: 'Huge steak in the shape of Mettaton.' },
-  { name: 'L. Hero', heal: 40, desc: 'Legendary Hero sandwich! Attack UP!' },
-  { name: 'L. Hero', heal: 40, desc: 'Legendary Hero sandwich! Attack UP!' },
-  { name: 'L. Hero', heal: 40, desc: 'Legendary Hero sandwich! Attack UP!' },
-  { name: 'Snowman Piece', heal: 45, desc: 'You ate the Snowman Piece. Cold & sweet.' },
-  { name: 'Snowman Piece', heal: 45, desc: 'You ate the Snowman Piece. Nostalgic.' }
+  { name: 'B.Scotch Pie', heal: 99, kind: 'heal', tag: 'HEAL', desc: 'All HP restored. Still warm from Toriel.' },
+  { name: 'Instant Noodles', heal: 90, kind: 'heal', tag: 'HEAL', desc: 'They are better dry. Restored 90 HP.' },
+  { name: 'Face Steak', heal: 60, kind: 'heal', tag: 'HEAL', desc: 'Huge steak in the shape of Mettaton.' },
+  { name: 'L. Hero', heal: 40, kind: 'heal', tag: 'HEAL', desc: 'Legendary Hero sandwich! Attack UP!' },
+  { name: 'L. Hero', heal: 40, kind: 'heal', tag: 'HEAL', desc: 'Legendary Hero sandwich! Attack UP!' },
+  { name: 'Snowman Piece', heal: 45, kind: 'heal', tag: 'HEAL', desc: 'You ate the Snowman Piece. Cold & sweet.' },
+  { name: 'Soul Dagger', heal: 0, kind: 'attack', effect: 'dagger', tag: 'ATK', color: '#2ce8f5', desc: 'Spectral blade cuts Sans (-22% next turn) +18 TP.' },
+  { name: 'Star Bomb', heal: 0, kind: 'attack', effect: 'bomb', tag: 'ATK', color: '#ffef3f', desc: 'Arms 4-hit Star Nova aura next turn +25 TP.' },
+  { name: 'Chrono Sand', heal: 0, kind: 'tactical', effect: 'chrono', tag: 'TAC', color: '#c084fc', desc: '0.72x bullet-time next turn & purges all KARMA.' },
+  { name: 'Ketchup', heal: 25, kind: 'tactical', effect: 'ketchup', tag: 'TAC', color: '#ff4c4c', desc: 'Toss to Sans: +25 HP, clears KR, +1 Truce, -12% speed.' }
 ];
 
 const SAVE_STORAGE_KEY = 'undertale_last_night_save_v1';
@@ -652,7 +654,7 @@ export class OverworldEngine {
               if (idx === 0) {
                 this.inventory = DEFAULT_INVENTORY();
                 audio.heal();
-                this.startDialogue(['* Your pockets are packed with all 8 healing items!']);
+                this.startDialogue(['* Your pockets are packed with all 10 healing & attack items!']);
               }
             }
           }
@@ -962,6 +964,13 @@ export class OverworldEngine {
         fm.subIdx = (fm.subIdx + 1) % this.inventory.length;
         audio.menuMove();
       } else if (input.justPressed('KeyZ') || input.justPressed('Enter')) {
+        const picked = this.inventory[fm.subIdx];
+        if (picked && (picked.kind === 'attack' || picked.kind === 'tactical')) {
+          audio.menuMove();
+          this.fieldMenu = null;
+          this.startDialogue([`* Save ${picked.name} for battle against Sans!\n* (${picked.desc})`]);
+          return;
+        }
         const item = this.inventory.splice(fm.subIdx, 1)[0];
         const bonus = WEAPONS[this.stats.weapon]?.itemHealBonus || 0;
         this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + item.heal + bonus);
@@ -1364,17 +1373,21 @@ export class OverworldEngine {
         ctx.fillStyle = '#888899';
         ctx.fillText('(No items left)', 230, 86);
       } else {
+        const compact = this.inventory.length > 8;
+        const rowStep = compact ? 25 : 31;
+        ctx.font = compact ? '11px "Press Start 2P", monospace' : '13px "Press Start 2P", monospace';
         this.inventory.forEach((it, idx) => {
-          const iy = 74 + idx * 31;
+          const iy = (compact ? 68 : 74) + idx * rowStep;
           if (this.fieldMenu.subIdx === idx) {
-            drawSoul(ctx, 218, iy - 5, 'red', { scale: 0.85 });
+            drawSoul(ctx, 214, iy - 4, 'red', { scale: 0.78 });
           }
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(it.name, 236, iy);
+          ctx.fillStyle = it.color || '#ffffff';
+          const tag = it.tag && it.tag !== 'HEAL' ? `[${it.tag}] ` : '';
+          ctx.fillText(`${tag}${it.name}`, 232, iy);
         });
         ctx.fillStyle = '#ffef3f';
         ctx.font = '10px "Press Start 2P", monospace';
-        ctx.fillText('[Z] Use Item   [X] Back', 226, 330);
+        ctx.fillText('[Z] Use Item   [X] Back', 226, 332);
       }
     } else if (this.fieldMenu.tab === 'STAT') {
       const wSpec = WEAPONS[this.stats.weapon] || WEAPONS['Real Knife'];

@@ -510,11 +510,24 @@ export class BattleEngine {
     this.subIndex = 0;
     this.itemPage = 0;
 
-    // Menu Bone Hazard (Phase 2+)
+    // Tactical / Attack Item Buffs & VFX
+    this.itemSpeedMult = 1.0;
+    this.itemDurationMult = 1.0;
+    this.starNovaCharges = 0;
+    this.itemEffects = [];
+
+    // Menu Bone Hazards (Phase 2+ Player Menu & Item Menu)
     this.menuBone = {
       active: false,
       x: 620,
       vx: -140,
+      hitCooldown: 0
+    };
+    this.itemMenuBones = {
+      active: false,
+      x: 590,
+      vx: -175,
+      row: 0,
       hitCooldown: 0
     };
 
@@ -851,6 +864,16 @@ export class BattleEngine {
       }
     }
 
+    // Item projectile & blast VFX timers
+    if (this.itemEffects && this.itemEffects.length > 0) {
+      for (let i = this.itemEffects.length - 1; i >= 0; i--) {
+        this.itemEffects[i].timer += dt;
+        if (this.itemEffects[i].timer >= this.itemEffects[i].duration) {
+          this.itemEffects.splice(i, 1);
+        }
+      }
+    }
+
     switch (this.state) {
       case 'INTRO_TRANSITION':
         this.introTimer += dt;
@@ -875,7 +898,7 @@ export class BattleEngine {
         this._updateActMenu(input);
         break;
       case 'ITEM_MENU':
-        this._updateItemMenu(input);
+        this._updateItemMenu(dt, input);
         break;
       case 'MERCY_MENU':
         this._updateMercyMenu(input);
@@ -1001,6 +1024,11 @@ export class BattleEngine {
       } else if (actionId === 2) {
         this.itemPage = 0;
         this.state = 'ITEM_MENU';
+        this.itemMenuBones.active = this.phase >= 2 && !this.sans.sleeping && this.practiceAttackIndex === null;
+        this.itemMenuBones.x = 590;
+        this.itemMenuBones.vx = this.phase >= 4 ? -235 : this.phase === 3 ? -205 : -175;
+        this.itemMenuBones.row = 0;
+        this.itemMenuBones.hitCooldown = 0.25;
       } else if (actionId === 3) {
         this.state = 'MERCY_MENU';
       }
@@ -1273,8 +1301,24 @@ export class BattleEngine {
     }
   }
 
-  _updateItemMenu(input) {
+  _updateItemMenu(dt, input) {
+    if (dt && typeof dt === 'object' && !input) {
+      input = dt;
+      dt = 1 / 60;
+    }
+    if (this.itemMenuBones?.active) {
+      this.itemMenuBones.x += this.itemMenuBones.vx * dt;
+      if (this.itemMenuBones.x < this.box.x + 8) {
+        this.itemMenuBones.x = this.box.x + this.box.w - 16;
+        this.itemMenuBones.row ^= 1;
+      }
+      if (this.itemMenuBones.hitCooldown > 0) {
+        this.itemMenuBones.hitCooldown -= dt;
+      }
+    }
+
     if (input.justPressed('KeyX') || input.justPressed('Escape')) {
+      this.itemMenuBones.active = false;
       audio.menuMove();
       this._enterPlayerMenu();
       return;
@@ -1282,11 +1326,35 @@ export class BattleEngine {
     if (this.inventory.length === 0) return;
 
     const totalPages = Math.max(1, Math.ceil(this.inventory.length / 4));
+    this.itemPage = Math.max(0, Math.min(totalPages - 1, this.itemPage));
     const pageStart = this.itemPage * 4;
     const pageItems = this.inventory.slice(pageStart, pageStart + 4);
     const count = pageItems.length;
+    if (this.subIndex >= count) this.subIndex = Math.max(0, count - 1);
 
-    if (input.justPressed('ArrowLeft') || input.justPressed('KeyA')) {
+    if (this.itemMenuBones?.active && this.itemMenuBones.hitCooldown <= 0) {
+      const col = this.subIndex % 2;
+      const row = Math.floor(this.subIndex / 2);
+      const cursorX = this.box.x + 36 + col * 255;
+      if (row === this.itemMenuBones.row && Math.abs(cursorX - (this.itemMenuBones.x + 10)) < 16) {
+        this.itemMenuBones.hitCooldown = 0.65;
+        if (!this.assistMode && this.stats.hp > 1) {
+          this.stats.hp = Math.max(1, this.stats.hp - 1);
+          audio.hurt();
+          this.addPopup(cursorX, this.box.y + 30 + row * 40, '-1 HP', '#ff4c4c');
+        }
+      }
+    }
+
+    if (input.justPressed('KeyQ') || input.justPressed('PageUp')) {
+      this.itemPage = (this.itemPage - 1 + totalPages) % totalPages;
+      this.subIndex = 0;
+      audio.menuMove();
+    } else if (input.justPressed('KeyE') || input.justPressed('PageDown')) {
+      this.itemPage = (this.itemPage + 1) % totalPages;
+      this.subIndex = 0;
+      audio.menuMove();
+    } else if (input.justPressed('ArrowLeft') || input.justPressed('KeyA')) {
       if (this.subIndex % 2 === 0 && totalPages > 1) {
         this.itemPage = (this.itemPage - 1 + totalPages) % totalPages;
         this.subIndex = 0;
@@ -1314,8 +1382,104 @@ export class BattleEngine {
         audio.menuMove();
       }
     } else if (input.justPressed('KeyZ') || input.justPressed('Enter')) {
+      this.itemMenuBones.active = false;
       const actualIdx = pageStart + this.subIndex;
       const item = this.inventory.splice(actualIdx, 1)[0];
+
+      if (item.effect === 'dagger') {
+        audio.itemThrow?.();
+        this.itemEffects.push({
+          kind: 'dagger',
+          timer: 0,
+          duration: 0.68,
+          x: 320,
+          y: 312,
+          tx: this.sans.x,
+          ty: this.sans.y - 54
+        });
+        this.tp = Math.min(100, this.tp + 18);
+        this.styleScore += 200;
+        this._refreshStyleRank();
+        this.itemDurationMult = Math.min(this.itemDurationMult, 0.78);
+        this.sans.dodgeTimer = 0.55;
+        this.sans.pose = 'shrug';
+        this.sans.expression = 'wink';
+        this._spawnParticles(this.sans.x, this.sans.y - 52, '#2ce8f5', 14, 150);
+        this.addPopup(this.sans.x, this.sans.y - 84, '-22% NEXT TURN!', '#2ce8f5');
+        this._showBoxDialogue(
+          `* You hurled the ${item.name}! Sans barely dodged the spectral blade!\n* Sans's next attack is 22% shorter & +18% TP gained.`,
+          () => this._advanceTurnAfterAction(1)
+        );
+        return;
+      }
+
+      if (item.effect === 'bomb') {
+        audio.itemBlast?.();
+        this.itemEffects.push({
+          kind: 'bomb',
+          timer: 0,
+          duration: 0.75,
+          x: 320,
+          y: 300,
+          tx: this.sans.x,
+          ty: this.sans.y - 58
+        });
+        this.starNovaCharges = Math.max(this.starNovaCharges, 4);
+        this.tp = Math.min(100, this.tp + 25);
+        this.styleScore += 180;
+        this._refreshStyleRank();
+        this.hitstopTimer = 0.04;
+        this.addScreenShake(5);
+        this._spawnParticles(this.sans.x, this.sans.y - 50, '#ffef3f', 16, 165);
+        this.addPopup(320, 232, 'STAR NOVA x4 ARMED!', '#ffef3f');
+        this._showBoxDialogue(
+          `* ${item.name} bursts into radiant Determination sparks!\n* Star Nova barrier armed (destroys 4 bones next turn) & +25% TP!`,
+          () => this._advanceTurnAfterAction(1)
+        );
+        return;
+      }
+
+      if (item.effect === 'chrono') {
+        audio.chronoSlow?.();
+        this.itemEffects.push({ kind: 'chrono', timer: 0, duration: 0.72, x: 320, y: 300 });
+        this.stats.kr = 0;
+        this.itemSpeedMult = Math.min(this.itemSpeedMult, 0.72);
+        this._spawnParticles(320, 300, '#c084fc', 14, 130);
+        this.addPopup(320, 232, 'BULLET-TIME 0.72x!', '#c084fc');
+        this._showBoxDialogue(
+          `* Cosmic hourglass dust slows the Judgment Hall!\n* Purged all KARMA & slowed Sans's next barrage to 0.72x speed!`,
+          () => this._advanceTurnAfterAction(1)
+        );
+        return;
+      }
+
+      if (item.effect === 'ketchup') {
+        audio.ketchupPop?.();
+        this.itemEffects.push({
+          kind: 'ketchup',
+          timer: 0,
+          duration: 0.72,
+          x: 320,
+          y: 310,
+          tx: this.sans.x,
+          ty: this.sans.y - 46
+        });
+        const beforeHp = this.stats.hp;
+        this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + item.heal);
+        this.stats.kr = 0;
+        const gained = this.stats.hp - beforeHp;
+        this.trucePoints += 1;
+        this.itemSpeedMult = Math.min(this.itemSpeedMult, 0.88);
+        this.sans.pose = 'shrug';
+        this.sans.expression = 'wink';
+        this.addPopup(this.sans.x, this.sans.y - 84, 'HEH. GOOD CHOICE.', '#ff4c4c');
+        this._showBoxDialogue(
+          `* Tossed Grillby's ${item.name}! Recovered ${gained} HP & cleared KR!\n* Sans catches it: "heh, fair trade. 12% slower next turn." (+1 Truce)`,
+          () => this._advanceTurnAfterAction(1)
+        );
+        return;
+      }
+
       const weaponSpec = WEAPONS[this.weaponName] || WEAPONS['Real Knife'];
       const healAmount = item.heal + (weaponSpec.itemHealBonus || 0);
       const krClear = Math.floor(item.heal * 0.5) + (weaponSpec.itemKrClearBonus || 0);
@@ -1509,6 +1673,7 @@ export class BattleEngine {
   _startDefendAttack() {
     this.state = 'DEFEND_ATTACK';
     this.menuBone.active = false;
+    this.itemMenuBones.active = false;
     this.usedTpSpellThisTurn = false;
     this.turnHitsTaken = 0;
     this.usedYellowThisTurn = false;
@@ -1538,7 +1703,9 @@ export class BattleEngine {
     const baseMult = this.tauntSpeedBoost ? 1.15 : 1.0;
     const modSpeedMult = this.modifiers?.hyperSpeed ? 1.35 : 1.0;
     const endlessMult = this.endlessMode ? Math.min(1.42, 1.0 + (this.endlessWave - 1) * 0.03) : 1.0;
-    const speedMult = baseMult * modSpeedMult * endlessMult * diffSpec.speedMult * (this.customSpeedMult || 1.0);
+    const itemSpd = this.itemSpeedMult || 1.0;
+    const itemDur = this.itemDurationMult || 1.0;
+    const speedMult = baseMult * modSpeedMult * endlessMult * diffSpec.speedMult * itemSpd * (this.customSpeedMult || 1.0);
     audio.setTempoMult?.(
       (this.modifiers?.hyperSpeed ? 1.16 : 1.0) * diffSpec.tempoMult * (this.stats.hp <= 24 ? 1.07 : 1.0)
     );
@@ -1547,10 +1714,13 @@ export class BattleEngine {
       phase: attackPhase,
       difficulty: this.difficulty,
       speedMult,
+      durationMult: itemDur,
       spawnGreenBonus: this.spawnGreenBonus,
       boxCX,
       boxCY
     });
+    this.itemSpeedMult = 1.0;
+    this.itemDurationMult = 1.0;
     this.tauntSpeedBoost = false;
     this.spawnGreenBonus = false;
     this.soul.dashTimer = 0;
@@ -1592,6 +1762,40 @@ export class BattleEngine {
 
     // Re-clamp after platforms or box interpolation
     this._clampSoulInsideBox();
+
+    // Star Bomb Nova Barrier: automatically vaporizes up to N nearby non-green bones/targets
+    if (this.starNovaCharges > 0) {
+      const sx = this.soul.x;
+      const sy = this.soul.y;
+      for (const b of this.runner.bones) {
+        if (this.starNovaCharges <= 0) break;
+        if (b.collected || b.color === 'green' || b.color === 'blue' || b.color === 'orange') continue;
+        const cx = Math.max(b.x, Math.min(sx, b.x + b.w));
+        const cy = Math.max(b.y, Math.min(sy, b.y + b.h));
+        if (Math.hypot(sx - cx, sy - cy) < 20) {
+          b.collected = true;
+          this.starNovaCharges -= 1;
+          this._spawnParticles(cx, cy, '#ffef3f', 7, 110);
+          audio.targetBreak?.();
+          this.addPopup(sx, sy - 18, `NOVA! (${this.starNovaCharges})`, '#ffef3f');
+        }
+      }
+      if (this.starNovaCharges > 0 && this.runner.destructibles?.length) {
+        for (let i = this.runner.destructibles.length - 1; i >= 0 && this.starNovaCharges > 0; i--) {
+          const d = this.runner.destructibles[i];
+          const cx = Math.max(d.x, Math.min(sx, d.x + d.w));
+          const cy = Math.max(d.y, Math.min(sy, d.y + d.h));
+          if (Math.hypot(sx - cx, sy - cy) < 22) {
+            this.runner.destructibles.splice(i, 1);
+            this.runner.targetsBroken += 1;
+            this.starNovaCharges -= 1;
+            this._spawnParticles(cx, cy, '#ffef3f', 7, 110);
+            audio.targetBreak?.();
+            this.addPopup(sx, sy - 18, `NOVA! (${this.starNovaCharges})`, '#ffef3f');
+          }
+        }
+      }
+    }
 
     // Check collisions
     const col = this.runner.checkCollisions(this.soul, this.box) || {};
@@ -1647,6 +1851,7 @@ export class BattleEngine {
 
     if (this.runner.finished) {
       this.krShieldActive = false;
+      this.starNovaCharges = 0;
 
       // Stained Apron / Heart Locket+ end-of-defend-turn heal
       const armorSpec = ARMORS[this.armorName] || ARMORS['The Locket'];
@@ -2445,6 +2650,63 @@ export class BattleEngine {
       ctx.restore();
     }
 
+    // Tactical / Attack Item projectile & blast VFX
+    if (this.itemEffects && this.itemEffects.length > 0) {
+      ctx.save();
+      for (const ef of this.itemEffects) {
+        const p = Math.min(1, ef.timer / ef.duration);
+        if (ef.kind === 'dagger') {
+          const px = ef.x + (ef.tx - ef.x) * Math.min(1, p * 1.45);
+          const py = ef.y + (ef.ty - ef.y) * Math.min(1, p * 1.45);
+          ctx.translate(px, py);
+          ctx.rotate(p * 16);
+          ctx.fillStyle = '#2ce8f5';
+          ctx.fillRect(-2, -10, 4, 20);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(-1, -8, 2, 12);
+          ctx.fillStyle = '#ffef3f';
+          ctx.fillRect(-5, 4, 10, 2);
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+        } else if (ef.kind === 'bomb') {
+          const arcY = ef.y + (ef.ty - ef.y) * Math.min(1, p * 1.35) - Math.sin(Math.min(1, p * 1.35) * Math.PI) * 52;
+          const bx = ef.x + (ef.tx - ef.x) * Math.min(1, p * 1.35);
+          if (p < 0.72) {
+            ctx.fillStyle = '#ffef3f';
+            ctx.beginPath();
+            ctx.arc(bx, arcY, 7, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            const rp = (p - 0.72) / 0.28;
+            ctx.globalAlpha = 1 - rp;
+            ctx.strokeStyle = '#ffef3f';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(ef.tx, ef.ty, 10 + rp * 54, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        } else if (ef.kind === 'chrono') {
+          ctx.globalAlpha = 1 - p;
+          ctx.strokeStyle = '#c084fc';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(ef.x, ef.y, 12 + p * 74, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (ef.kind === 'ketchup') {
+          const t = Math.min(1, p * 1.3);
+          const kx = ef.x + (ef.tx - ef.x) * t;
+          const ky = ef.y + (ef.ty - ef.y) * t - Math.sin(t * Math.PI) * 60;
+          ctx.translate(kx, ky);
+          ctx.rotate(t * 10);
+          ctx.fillStyle = '#ff3030';
+          ctx.fillRect(-4, -8, 8, 16);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(-2, -11, 4, 3);
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+        }
+      }
+      ctx.restore();
+    }
+
     // MISS or 9999999 Damage Popup
     if (this.fightBar.showMiss) {
       ctx.save();
@@ -2556,6 +2818,23 @@ export class BattleEngine {
         ctx.globalAlpha = 0.65 + 0.25 * Math.sin(this.time * 8);
         ctx.beginPath();
         ctx.arc(this.soul.x, this.soul.y, 15, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (this.starNovaCharges > 0) {
+        ctx.save();
+        ctx.strokeStyle = '#ffef3f';
+        ctx.lineWidth = 2;
+        for (let k = 0; k < this.starNovaCharges; k++) {
+          const ang = this.time * 4.5 + (k * Math.PI * 2) / this.starNovaCharges;
+          const ox = this.soul.x + Math.cos(ang) * 18;
+          const oy = this.soul.y + Math.sin(ang) * 18;
+          ctx.fillStyle = '#ffef3f';
+          ctx.fillRect(Math.round(ox) - 2, Math.round(oy) - 2, 4, 4);
+        }
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        ctx.arc(this.soul.x, this.soul.y, 18, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
@@ -3061,26 +3340,58 @@ export class BattleEngine {
 
     const totalPages = Math.max(1, Math.ceil(this.inventory.length / 4));
     const pageItems = this.inventory.slice(this.itemPage * 4, this.itemPage * 4 + 4);
-    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.font = '13px "Press Start 2P", monospace';
     pageItems.forEach((item, idx) => {
       const col = idx % 2;
       const row = Math.floor(idx / 2);
-      const ix = this.box.x + 56 + col * 255;
-      const iy = this.box.y + 46 + row * 44;
+      const ix = this.box.x + 54 + col * 255;
+      const iy = this.box.y + 44 + row * 40;
       if (this.subIndex === idx) {
-        drawSoul(ctx, ix - 20, iy - 5, 'red', { scale: 0.9 });
-        ctx.fillStyle = '#ffef3f';
-      } else {
-        ctx.fillStyle = '#ffffff';
+        drawSoul(ctx, ix - 18, iy - 5, 'red', { scale: 0.85 });
       }
-      ctx.fillText(`* ${item.name}`, ix, iy);
+      const isSpecial = item.kind === 'attack' || item.kind === 'tactical';
+      ctx.fillStyle = this.subIndex === idx ? (item.color || '#ffef3f') : isSpecial ? (item.color || '#2ce8f5') : '#ffffff';
+      const prefix = item.tag && item.tag !== 'HEAL' ? `[${item.tag}] ` : '* ';
+      ctx.fillText(`${prefix}${item.name}`, ix, iy);
     });
+
+    // Item Menu Bone Attack Hazard (Phase 2+)
+    if (this.itemMenuBones?.active) {
+      const railY = this.box.y + 40 + this.itemMenuBones.row * 40;
+      ctx.strokeStyle = 'rgba(255, 68, 68, 0.42)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(this.box.x + 12, railY);
+      ctx.lineTo(this.box.x + this.box.w - 12, railY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const bx = Math.round(this.itemMenuBones.x);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(bx, railY - 3, 14, 6);
+      ctx.fillRect(bx - 2, railY - 4, 4, 8);
+      ctx.fillRect(bx + 12, railY - 4, 4, 8);
+      ctx.fillStyle = '#ff4444';
+      ctx.fillRect(bx + 2, railY - 1, 10, 2);
+
+      ctx.fillStyle = '#ff5c5c';
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.fillText('! DODGE MENU BONE', this.box.x + this.box.w - 156, this.box.y + 18);
+    }
+
+    const selItem = pageItems[this.subIndex] || pageItems[0];
+    if (selItem?.desc) {
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '15px "VT323", "Courier New", monospace';
+      ctx.fillText(selItem.desc, this.box.x + 24, this.box.y + 114);
+    }
 
     ctx.fillStyle = '#ffef3f';
     ctx.font = '10px "Press Start 2P", monospace';
-    ctx.fillText(`PAGE ${this.itemPage + 1}/${totalPages}`, this.box.x + 426, this.box.y + 134);
+    ctx.fillText(`PAGE ${this.itemPage + 1}/${totalPages}`, this.box.x + 426, this.box.y + 138);
     ctx.fillStyle = '#9090a8';
-    ctx.fillText('[Z] Eat  [X] Back', this.box.x + 24, this.box.y + 134);
+    ctx.fillText('[Z] Use  [X] Back', this.box.x + 24, this.box.y + 138);
     ctx.restore();
   }
 
@@ -3394,9 +3705,9 @@ export class BattleEngine {
     } else if (this.state === 'ITEM_MENU') {
       const pageItems = this.inventory.slice(this.itemPage * 4, this.itemPage * 4 + 4);
       const col = x >= this.box.x + 295 ? 1 : 0;
-      const row = y >= this.box.y + 62 ? 1 : 0;
+      const row = y >= this.box.y + 58 ? 1 : 0;
       const idx = row * 2 + col;
-      if (y >= this.box.y + 18 && y <= this.box.y + 112 && idx < pageItems.length && this.subIndex !== idx) {
+      if (y >= this.box.y + 18 && y <= this.box.y + 102 && idx < pageItems.length && this.subIndex !== idx) {
         this.subIndex = idx;
         audio.menuMove();
       }
@@ -3459,7 +3770,7 @@ export class BattleEngine {
         fireKey('KeyZ');
       }
     } else if (this.state === 'ITEM_MENU') {
-      if (y >= this.box.y + 114 && y <= this.box.y + 148) {
+      if (y >= this.box.y + 122 && y <= this.box.y + 148) {
         if (x >= this.box.x + 390) {
           const totalPages = Math.max(1, Math.ceil(this.inventory.length / 4));
           if (totalPages > 1) {
@@ -3472,7 +3783,7 @@ export class BattleEngine {
         }
         return;
       }
-      if (y >= this.box.y + 18 && y <= this.box.y + 112 && this.inventory.length > 0) {
+      if (y >= this.box.y + 18 && y <= this.box.y + 102 && this.inventory.length > 0) {
         fireKey('KeyZ');
       }
     } else if (this.state === 'MERCY_MENU') {

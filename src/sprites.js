@@ -719,16 +719,24 @@ export function drawSansOverworld(ctx, x, y, scale = 2.5, glowEye = false) {
 // ============================================================================
 
 const SANS_PAL = {
-  K: '#07070c', // crisp black outline & eye voids
+  K: '#07070c', // crisp ink outline & eye sockets
   W: '#ffffff', // pure skull/teeth/stripe white
-  L: '#dce2f0', // cool bone/collar shading
-  G: '#9aa5be', // deeper grey bone/hood shadow
+  E: '#eef2fa', // cool ivory cranium highlight
+  L: '#dce2f0', // cool bone shading
+  G: '#9aa5be', // deeper slate bone shadow
+  M: '#5a6684', // socket & chin under-shadow
+  U: '#f4f6fc', // fluffy fur hood highlight
+  T: '#bcc6dc', // fur hood midtone
+  N: '#7a87a4', // fur hood fold shadow
   B: '#2262e0', // main hoodie blue
   H: '#4d8cff', // hoodie shoulder highlight
-  D: '#153b8f', // hoodie deep shadow
+  J: '#1849b8', // hoodie lapel crease
+  D: '#12327a', // hoodie deep shadow
   S: '#0c0c14', // shorts black
-  P: '#f29bc1', // slipper pink
-  Q: '#c96e98', // slipper shadow
+  X: '#25273a', // shorts fold highlight
+  P: '#ff9ec9', // plush slipper highlight
+  O: '#e874a8', // slipper pink midtone
+  Q: '#b54c7d', // slipper sole shadow
   R: '#ff2828', // crimson slash
   F: '#ffa0a0', // fresh slash glint
   Y: '#8a1414', // dark dried scar
@@ -738,259 +746,268 @@ const SANS_PAL = {
   V: '#9b4dff'  // gaster void glitch
 };
 
-// 28x24 Skull Base (hollow sockets as baseline)
+// 34x26 Sculpted Cranium Skull Base (@2x = 68x52)
 const SANS_HEAD_HOLLOW = [
-  '........KKKKKKKKKKKK........',
-  '......KKWWWWWWWWWWWWKK......',
-  '....KKWWWWWWWWWWWWWWWWKK....',
-  '...KWWWWWWWWWWWWWWWWWWWWK...',
-  '..KWWWWWWWWWWWWWWWWWWWWWWK..',
-  '..KLWWWWWWWWWWWWWWWWWWWWLK..',
-  '.KWWWWWWWWWWWWWWWWWWWWWWWWK.',
-  '.KWWWWWWWWWWWWWWWWWWWWWWWWK.',
-  '.KWWWWWWWWWWWWWWWWWWWWWWWWK.',
-  '.KWWWWKKKKKKWWWWKKKKKKWWWWK.',
-  '.KWWWKKKKKKKWWWWKKKKKKKWWWK.',
-  '.KWWWKKKKKKKWWWWKKKKKKKWWWK.',
-  '.KWWWKKKKKKKWWWWKKKKKKKWWWK.',
-  '.KLWWKKKKKKKWWWWKKKKKKKWWLK.',
-  '.KWWWWWWWWWWWKKWWWWWWWWWWWK.',
-  'KWWWWWWWWWWWKKKKWWWWWWWWWWWK',
-  'KLLWWWWWWWWWWWWWWWWWWWWWWLLK',
-  '.KKWWKWWWWWWWWWWWWWWWWKWWKK.',
-  '..KWWKKWWKWWKWWKWWKWWKKWWK..',
-  '..KWWWKWWKWWKWWKWWKWWKWWWK..',
-  '...KWWKKKKKKKKKKKKKKKKWWK...',
-  '....KLLWWWWWWWWWWWWWWLLK....',
-  '.....KKLLLLLLLLLLLLLLKK.....',
-  '.......KKKKKKKKKKKKKK.......'
+  '..........KKKKKKKKKKKKKK..........',
+  '.......KKKWWWWWWWWWWWWWWKKK.......',
+  '.....KKWWWWWWWWWWWWWWWWWWWWKK.....',
+  '....KWEEWWWWWWWWWWWWWWWWWWWWEEK...',
+  '...KLWWWWWWWWWWWWWWWWWWWWWWWWWWLK.',
+  '..KLWWWWWWWWWWWWWWWWWWWWWWWWWWWWLK',
+  '..KEEWWWWWWWWWWWWWWWWWWWWWWWWWWEEK',
+  '.KLWWWWWWWWWWWWWWWWWWWWWWWWWWWWWLK',
+  '.KWWWWWWKKKKKKKWWWWKKKKKKKWWWWWWWK',
+  '.KWWWWWKKKKKKKKKWWKKKKKKKKKWWWWWWK',
+  '.KWWWWKKKKKKKKKKWWKKKKKKKKKKWWWWWK',
+  '.KWWWWKKKKKKKKKKWWKKKKKKKKKKWWWWWK',
+  '.KLWWWKKKKKKKKKKWWKKKKKKKKKKWWWLWK',
+  '..KLLWWWGGGGGGGWKKWGGGGGGGWWWLLK..',
+  '.KEEWWWWWWWWWWWKKKKWWWWWWWWWWWWEEK',
+  'KLLWWWWWWWWWWWWKKKKWWWWWWWWWWWWLLK',
+  'KGGGWWWWWWWWWWWWWWWWWWWWWWWWWWWGGK',
+  'KGGGWWKWWWWWWWWWWWWWWWWWWWWWWKWWGK',
+  '.KGGWWKKWWKWWKWWKKWWKWWKWWKKWWGGK.',
+  '..KLLWKKWWKWWKWWKKWWKWWKWWKKWLLK..',
+  '...KWWKKKKKKKKKKKKKKKKKKKKKKWWK...',
+  '....KLLWWWWWWWWWWWWWWWWWWWWLLK....',
+  '.....KGGLLLLLLLLLLLLLLLLLLGGK.....',
+  '......KKGGGGGGGGGGGGGGGGGGKK......',
+  '........KKKKKKKKKKKKKKKKKK........',
+  '..................................'
 ];
 
 const SANS_HEAD_VARIANTS = {
   hollow: SANS_HEAD_HOLLOW,
   normal: composeGrid(SANS_HEAD_HOLLOW, {
-    10: '~~~~~~~~WW~~~~~~~~WW~~~~~~~~',
-    11: '~~~~~~~~WW~~~~~~~~WW~~~~~~~~'
+    10: '~~~~~~~~~~WW~~~~~~~~~~WW~~~~~~~~~~',
+    11: '~~~~~~~~~~WW~~~~~~~~~~WW~~~~~~~~~~'
   }),
   wink: composeGrid(SANS_HEAD_HOLLOW, {
-    9:  '~~~~~~~~~~~~~~~~WWWWWW~~~~~~',
-    10: '~~~~~~~~WW~~~~~~WKKKKW~~~~~~',
-    11: '~~~~~~~~~~~~~~~~KWWWWK~~~~~~',
-    12: '~~~~~~~~~~~~~~~~WWWWWW~~~~~~',
-    13: '~~~~~~~~~~~~~~~~WWWWWW~~~~~~'
+    9:  '~~~~~~~~~~~~~~~~~~~~~WWWWWWW~~~~~~',
+    10: '~~~~~~~~~~WW~~~~~~~~~WKKKKKW~~~~~~',
+    11: '~~~~~~~~~~~~~~~~~~~~~KWWWWWK~~~~~~',
+    12: '~~~~~~~~~~~~~~~~~~~~~WWWWWWW~~~~~~'
   }),
   closed: composeGrid(SANS_HEAD_HOLLOW, {
-    9:  '~~~~~~WWWWWW~~~~WWWWWW~~~~~~',
-    10: '~~~~~WWWWWWWW~~WWWWWWWW~~~~~',
-    11: '~~~~~WKWWWWKW~~WKWWWWKW~~~~~',
-    12: '~~~~~WWKKKKWW~~WWKKKKWW~~~~~',
-    13: '~~~~~~WWWWWW~~~~WWWWWW~~~~~~'
+    9:  '~~~~~~WWWWWWW~~~~~WWWWWWW~~~~~~~~~',
+    10: '~~~~~WWWWWWWWW~~~WWWWWWWWW~~~~~~~~',
+    11: '~~~~~WKWWWWWKW~~~WKWWWWWKW~~~~~~~~',
+    12: '~~~~~WWKKKKKWW~~~WWKKKKKWW~~~~~~~~'
   }),
   sleeping: composeGrid(SANS_HEAD_HOLLOW, {
-    9:  '~~~~~~WWWWWW~~~~WWWWWW~~~~~~',
-    10: '~~~~~WWWWWWWW~~WWWWWWWW~~~~~',
-    11: '~~~~~WKWWWWKW~~WKWWWWKW~~~~~',
-    12: '~~~~~WWKKKKWW~~WWKKKKWW~~~~~',
-    13: '~~~~~~WWWWWW~~~~WWWWWW~~~~~~',
-    18: '~~~~~KKWWWWWWWWWWWWWWKK~~~~~',
-    19: '~~~~~~KWWWWWWWWWWWWWWK~~~~~~'
+    9:  '~~~~~~WWWWWWW~~~~~WWWWWWW~~~~~~~~~',
+    10: '~~~~~WWWWWWWWW~~~WWWWWWWWW~~~~~~~~',
+    11: '~~~~~WKWWWWWKW~~~WKWWWWWKW~~~~~~~~',
+    12: '~~~~~WWKKKKKWW~~~WWKKKKKWW~~~~~~~~',
+    18: '~~~~~~KKKKKKKKKKKKKKKKKKKKKK~~~~~~',
+    19: '~~~~~~~KWWWWWWWWWWWWWWWWWWK~~~~~~~'
   }),
   tired: composeGrid(SANS_HEAD_HOLLOW, {
-    9:  '~~~~~~WWWWWW~~~~WWWWWW~~~~~~',
-    10: '~~~~~WLLLLLLW~~WLLLLLLW~~~~~',
-    11: '~~~~~KKKKKKKK~~KKKKKKKK~~~~~',
-    12: '~~~~~~~~WW~~~~~~~~WW~~~~~~~~'
+    9:  '~~~~~~WWWWWWW~~~~~WWWWWWW~~~~~~~~~',
+    10: '~~~~~WLLLLLLLW~~~WLLLLLLLW~~~~~~~~',
+    11: '~~~~~KKKKKKKKK~~~KKKKKKKKK~~~~~~~~',
+    12: '~~~~~~~~~WW~~~~~~~~~~WW~~~~~~~~~~~'
   }),
   cracked: composeGrid(SANS_HEAD_HOLLOW, {
-    2:  '~~~~~~~~~~~~~~~~~~~~KK~~~~~~',
-    3:  '~~~~~~~~~~~~~~~~~~~K~~~~~~~~',
-    4:  '~~~~~~~~~~~~~~~~~~KG~~~~~~~~',
-    5:  '~~~~~~~~~~~~~~~~~KG~~~~~~~~~',
-    6:  '~~~~~~~~~~~~~~~~KG~~~~~~~~~~',
-    7:  '~~~~~~~~~~~~~~~~K~~~~~~~~~~~',
-    8:  '~~~~~~~~~~~~~~~K~~~~~~~~~~~~',
-    9:  '~~~~~~WWWWWW~~~~WWWWWW~~~~~~',
-    10: '~~~~~WLLLLLLW~~WLLLLLLW~~~~~',
-    11: '~~~~~KKKKKKKK~~KKKKKKKK~~~~~',
-    12: '~~~~~~~~WW~~~~~~~~WW~~~~~~~~'
+    2:  '~~~~~~~~~~~~~~~~~~~~~~~KK~~~~~~~~~',
+    3:  '~~~~~~~~~~~~~~~~~~~~~~K~~~~~~~~~~~',
+    4:  '~~~~~~~~~~~~~~~~~~~~~KG~~~~~~~~~~~',
+    5:  '~~~~~~~~~~~~~~~~~~~~KGM~~~~~~~~~~~',
+    6:  '~~~~~~~~~~~~~~~~~~~KGM~~~~~~~~~~~~',
+    7:  '~~~~~~~~~~~~~~~~~~KG~~~~~~~~~~~~~~',
+    8:  '~~~~~~~~~~~~~~~~~K~~~~~~~~~~~~~~~~',
+    9:  '~~~~~~WWWWWWW~~~~~WWWWWWW~~~~~~~~~',
+    10: '~~~~~WLLLLLLLW~~~WLLLLLLLW~~~~~~~~',
+    11: '~~~~~KKKKKKKKK~~~KKKKKKKKK~~~~~~~~',
+    12: '~~~~~~~~~WW~~~~~~~~~~WW~~~~~~~~~~~'
   }),
   blueEyeCyan: composeGrid(SANS_HEAD_HOLLOW, {
-    10: '~~~~~~~~WW~~~~~~~~CC~~~~~~~~',
-    11: '~~~~~~~~WW~~~~~~~CWWC~~~~~~~',
-    12: '~~~~~~~~~~~~~~~~~~CC~~~~~~~~'
+    10: '~~~~~~~~~~WW~~~~~~~~~CCCC~~~~~~~~~',
+    11: '~~~~~~~~~~WW~~~~~~~~CCWWCC~~~~~~~~',
+    12: '~~~~~~~~~~~~~~~~~~~~~CCCC~~~~~~~~~'
   }),
   blueEyeYellow: composeGrid(SANS_HEAD_HOLLOW, {
-    10: '~~~~~~~~WW~~~~~~~~ZZ~~~~~~~~',
-    11: '~~~~~~~~WW~~~~~~~ZWWZ~~~~~~~',
-    12: '~~~~~~~~~~~~~~~~~~ZZ~~~~~~~~'
+    10: '~~~~~~~~~~WW~~~~~~~~~ZZZZ~~~~~~~~~',
+    11: '~~~~~~~~~~WW~~~~~~~~ZZWWZZ~~~~~~~~',
+    12: '~~~~~~~~~~~~~~~~~~~~~ZZZZ~~~~~~~~~'
   }),
   gaster: composeGrid(SANS_HEAD_HOLLOW, {
-    4:  '~~~~~~~~~~~~~~~~~~~K~~~~~~~~',
-    5:  '~~~~~~~~~~~~~~~~~~~K~~~~~~~~',
-    6:  '~~~~~~~~~~~~~~~~~~~K~~~~~~~~',
-    7:  '~~~~~~~~~~~~~~~~~~~K~~~~~~~~',
-    8:  '~~~~~~~~~~~~~~~~~~~K~~~~~~~~',
-    10: '~~~~~~~~LL~~~~~~~CVWC~~~~~~~',
-    11: '~~~~~~~~~~~~~~~~~VWWC~~~~~~~',
-    12: '~~~~~~~~~~~~~~~~~~CV~~~~~~~~',
-    14: '~~~~~~~~~~~~~~~~~~~K~~~~~~~~',
-    15: '~~~~~~~~~~~~~~~~~~~K~~~~~~~~',
-    16: '~~~~~~~~~~~~~~~~~~~K~~~~~~~~'
+    4:  '~~~~~~~~~~~~~~~~~~~~~~~K~~~~~~~~~~',
+    5:  '~~~~~~~~~~~~~~~~~~~~~~~K~~~~~~~~~~',
+    6:  '~~~~~~~~~~~~~~~~~~~~~~~K~~~~~~~~~~',
+    7:  '~~~~~~~~~~~~~~~~~~~~~~~K~~~~~~~~~~',
+    8:  '~~~~~~~~~~~~~~~~~~~~~~~K~~~~~~~~~~',
+    10: '~~~~~~~~~~LL~~~~~~~~CVWWC~~~~~~~~~',
+    11: '~~~~~~~~~~~~~~~~~~~~VWWWC~~~~~~~~~',
+    12: '~~~~~~~~~~~~~~~~~~~~~CVC~~~~~~~~~~',
+    14: '~~~~~~~~~~~~~~~~~~~~~~~K~~~~~~~~~~',
+    15: '~~~~~~~~~~~~~~~~~~~~~~~K~~~~~~~~~~',
+    16: '~~~~~~~~~~~~~~~~~~~~~~~K~~~~~~~~~~'
   })
 };
 
 const SANS_CRACK_OVERLAY = [
-  '............................',
-  '............................',
-  '....................KK......',
-  '...................K........',
-  '..................KG........',
-  '.................KG.........',
-  '................KG..........',
-  '................K...........',
-  '...............K............'
+  '..................................',
+  '..................................',
+  '.......................KK.........',
+  '......................K...........',
+  '.....................KG...........',
+  '....................KG............',
+  '...................KG.............',
+  '..................KG..............',
+  '.................K................'
 ];
 
-// 36x24 Hoodie & Ribcage Torso
+// 44x28 Fur Hood, Jacket Lapels & Ribcage Sweater (@2x = 88x56)
 const SANS_TORSO_POCKETS = [
-  '.........KKKKKKKKKKKKKKKKKK.........',
-  '.......KKLLLLWWWWWWWWWWLLLLKK.......',
-  '.....KKLLWWWWLLLLLLLLLLWWWWLLKK.....',
-  '....KLLWWLLKKLLLLLLLLLLKKLLWWLLK....',
-  '...KHHBBBBKWWLKKKKKKKKLWWKBBBBHHK...',
-  '..KHHBBBBBKWWLWWWWWWWWLWWKBBBBBHHK..',
-  '.KHHBBBBBBKWWLLGGGGGGLLWWKBBBBBBHHK.',
-  '.KBBBBBBBBKWWWWWWWWWWWWWWKBBBBBBBBK.',
-  'KBBBBBBBBBKWWLLGGGGGGLLWWKBBBBBBBBBK',
-  'KBBBDBBBBBKWWWWWWWWWWWWWWKBBBBDBBBBK',
-  'KBBBDDBBBBKWWLLGGGGGGLLWWKBBBBDDBBBK',
-  'KBBBDDBBBBKWWWWWWWWWWWWWWKBBBBDDBBBK',
-  'KBBBBBBBBBKWWLLGGGGGGLLWWKBBBBBBBBBK',
-  'KBBBBBBBBBKWWWWWWWWWWWWWWKBBBBBBBBBK',
-  'KBBKKBBBBBKWWLLGGGGGGLLWWKBBBBBKKBBK',
-  'KBBBDKBBBBKWWWWWWWWWWWWWWKBBBBKDBBBK',
-  'KBBBBDKBBBKWWWWWWWWWWWWWWKBBBKDBBBBK',
-  '.KBBBBDKBBKWWWWWWWWWWWWWWKBBKDBBBBK.',
-  '.KBBBBBDKKKWWWWWWWWWWWWWWKKKDBBBBBK.',
-  '..KDDDDDDDKWWWWWWWWWWWWWWKDDDDDDDK..',
-  '...KKKKKKKKDDDDDDDDDDDDDDKKKKKKKK...',
-  '....KSSSSSSSSSSSSSSSSSSSSSSSSSSK....',
-  '.....KKKKKKKKKKKKKKKKKKKKKKKKKK.....',
-  '....................................'
+  '............KKKKKKKKKKKKKKKKKKKK............',
+  '.........KKKUUUUUUUUUUUUUUUUUUUUKKK.........',
+  '.......KKUUUUTTTTTTUUUUUUTTTTTTUUUUKK.......',
+  '......KUUTTNNKKKKKKUUUUUUKKKKKKNNTTUUK......',
+  '....KKHBBBBKKUUUUTTKKKKKKTTUUUUKKBBBBHKK....',
+  '...KHHBBBBBBKUUUWWWWWWWWWWWWUUUKBBBBBBHHK...',
+  '..KHHBBBBBBBKUUULLLGGGGGGLLLUUUKBBBBBBBBBHK.',
+  '.KHHBBBBBBBBKUUUWWWWWWWWWWWWUUUKBBBBBBBBBBHK',
+  '.KBBBBBBBBBBKTTLLGGGGGGGGGGLLTTKBBBBBBBBBBBK',
+  'KBBBBJBBBBBBKUUWWWWWWWWWWWWWWUUKBBBBBBJBBBBK',
+  'KBBBJDJBBBBBKTTLLGGGGGGGGGGLLTTKBBBBBJBJBBBK',
+  'KBBBDDJBBBBBKWWWWWWWWWWWWWWWWWWKBBBBJDDJBBBK',
+  'KBBBBBBBBBBBKLLGGGGGGKKGGGGGGLLKBBBBBBBBBBBK',
+  'KBBBBBBBBBBBKWWWWWWWWKKWWWWWWWWKBBBBBBBBBBBK',
+  'KBBJBBBBBBBBKLLGGGGGGGGGGGGGGLLKBBBBBBBBJBBK',
+  'KBBKKBBBBBBBKWWWWWWWWKKWWWWWWWWKBBBBBBBKKBBK',
+  'KBBBDKBBBBBBKWWLLGGGGKKGGGGLLWWKBBBBBBKDBBBK',
+  'KBBBBKKBBBBBKWWWWWWWWWWWWWWWWWWKBBBBBKKBBBBK',
+  '.KBBBBDKBBBBKWWWWWWWWKKWWWWWWWWKBBBBKDBBBBK.',
+  '.KBBBBBDKKBBKLLLLWWWWWWWWWWLLLLKBBKKDBBBBBK.',
+  '..KDDDDDDDKBKWWWWWWWWKKWWWWWWWWKBKDDDDDDDK..',
+  '...KDDDDDDKKKGGGGLLLLLLLLLLGGGGKKKDDDDDDK...',
+  '....KKKKKKKKKDDDDDDDDDDDDDDDDDDKKKKKKKKK....',
+  '.....KXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXK.....',
+  '......KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK......',
+  '............................................',
+  '............................................',
+  '............................................'
 ];
 
 const SANS_TORSO_SHRUG = composeGrid(SANS_TORSO_POCKETS, {
-  4:  '..KHHBBBBBKWWLKKKKKKKKLWWKBBBBHHK...',
-  5:  '.KHHBBBBBBKWWLWWWWWWWWLWWKBBBBBBHHK.',
-  6:  'KHHBBBBBBBKWWLLGGGGGGLLWWKBBBBBBBHHK',
-  7:  'KBBBBBBBBBKWWWWWWWWWWWWWWKBBBBBBBBBK',
-  8:  'KBBBDBBBBBKWWLLGGGGGGLLWWKBBBBDBBBBK',
-  9:  '.KKKDBBBBBKWWWWWWWWWWWWWWKBBBBDKKK..',
-  10: '...KDBBBBBKWWLLGGGGGGLLWWKBBBBDK....',
-  11: '...KBBBBBBKWWWWWWWWWWWWWWKBBBBBK....',
-  12: '...KBBBBBBKWWLLGGGGGGLLWWKBBBBBK....',
-  13: '...KBBBBBBKWWWWWWWWWWWWWWKBBBBBK....',
-  14: '...KBBBBBBKWWLLGGGGGGLLWWKBBBBBK....',
-  15: '...KBBBBBBKWWWWWWWWWWWWWWKBBBBBK....',
-  16: '...KBBBBBBKWWWWWWWWWWWWWWKBBBBBK....',
-  17: '...KBBBBBBKWWWWWWWWWWWWWWKBBBBBK....',
-  18: '...KBBBBBBKWWWWWWWWWWWWWWKBBBBBK....',
-  19: '...KDDDDDDKWWWWWWWWWWWWWWKDDDDDK....'
+  4:  '...KHHBBBBBBKUUUUTTKKKKKKTTUUUUKBBBBBBHHK...',
+  5:  '..KHHBBBBBBBKUUUWWWWWWWWWWWWUUUKBBBBBBBHHK..',
+  6:  '.KHHBBBBBBBBKUUULLLGGGGGGLLLUUUKBBBBBBBBBBHK',
+  7:  'KHHBBBBBBBBBKUUUWWWWWWWWWWWWUUUKBBBBBBBBBBHK',
+  8:  'KBBBBBBBBBBBKTTLLGGGGGGGGGGLLTTKBBBBBBBBBBBK',
+  9:  '.KKJDJBBBBBBKUUWWWWWWWWWWWWWWUUKBBBBBBJDJKK.',
+  10: '...KDDJBBBBBKTTLLGGGGGGGGGGLLTTKBBBBBJDDK...',
+  11: '....KBBBBBBBKWWWWWWWWWWWWWWWWWWKBBBBBBBK....',
+  12: '....KBBBBBBBKLLGGGGGGKKGGGGGGLLKBBBBBBBK....',
+  13: '....KBBBBBBBKWWWWWWWWKKWWWWWWWWKBBBBBBBK....',
+  14: '....KBBBBBBBKLLGGGGGGGGGGGGGGLLKBBBBBBBK....',
+  15: '....KBBBBBBBKWWWWWWWWKKWWWWWWWWKBBBBBBBK....',
+  16: '....KBBBBBBBKWWLLGGGGKKGGGGLLWWKBBBBBBBK....',
+  17: '....KBBBBBBBKWWWWWWWWWWWWWWWWWWKBBBBBBBK....',
+  18: '....KBBBBBBBKWWWWWWWWKKWWWWWWWWKBBBBBBBK....',
+  19: '....KBBBBBBBKLLLLWWWWWWWWWWLLLLKBBBBBBBK....',
+  20: '....KDDDDDDDKWWWWWWWWKKWWWWWWWWKDDDDDDDK....'
 });
 
 const SANS_TORSO_DAMAGED = composeGrid(SANS_TORSO_POCKETS, {
-  4:  '~~~~~~~RR~~~~~~~~~~~~~~~~~~~~~~~~~~~',
-  5:  '~~~~~~~~RRF~~~~~~~~~~~~~~~~~~~~~~~~~',
-  6:  '~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~~',
-  7:  '~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~',
-  8:  '~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~',
-  9:  '~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~',
-  10: '~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~',
-  11: '~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~',
-  12: '~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~',
-  13: '~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~',
-  14: '~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~',
-  15: '~~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~',
-  16: '~~~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~',
-  17: '~~~~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~',
-  18: '~~~~~~~~~~~~~~~~~~~~~YRR~~~~~~~~~~~~',
-  19: '~~~~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~'
+  4:  '~~~~~~~~~RR~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  5:  '~~~~~~~~~~RRF~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  6:  '~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  7:  '~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  8:  '~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  9:  '~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  10: '~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~~~~',
+  11: '~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~~~',
+  12: '~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~~',
+  13: '~~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~~',
+  14: '~~~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~~',
+  15: '~~~~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~~',
+  16: '~~~~~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~~',
+  17: '~~~~~~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~~',
+  18: '~~~~~~~~~~~~~~~~~~~~~~~YRRF~~~~~~~~~~~~~~~~~',
+  19: '~~~~~~~~~~~~~~~~~~~~~~~~YRR~~~~~~~~~~~~~~~~~',
+  20: '~~~~~~~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~'
 });
 
 const SANS_TORSO_SCAR_P3 = composeGrid(SANS_TORSO_POCKETS, {
-  6:  '~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~~',
-  7:  '~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~',
-  8:  '~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~',
-  9:  '~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~',
-  10: '~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~',
-  11: '~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~',
-  12: '~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~',
-  13: '~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~',
-  14: '~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~',
-  15: '~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~',
-  16: '~~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~',
-  17: '~~~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~'
+  6:  '~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  7:  '~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  8:  '~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  9:  '~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  10: '~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  11: '~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~~~',
+  12: '~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~~',
+  13: '~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~~',
+  14: '~~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~~',
+  15: '~~~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~~',
+  16: '~~~~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~~',
+  17: '~~~~~~~~~~~~~~~~~~~~~~~YY~~~~~~~~~~~~~~~~~~~'
 });
 
-// Pixel-grid limbs for extended poses (2x aligned)
+// Articulated Skeletal Limbs (2x aligned)
 const SANS_HAND_UP_GRID = [
-  '..KK..KK..',
-  '.KWWKKWWK.',
-  'KWWWWWWWWK',
-  'KWWLWWLWWK',
-  '.KWWWWWWK.',
-  '..KWWWWK..',
-  '..KBBBBK..',
-  '..KBBBBK..',
-  '.KBBBBBHK.',
-  '.KBBBBBBK.',
-  '.KDBBBBBK.',
-  '.KDBBBBBK.',
-  '.KDDDDDDK.',
-  '..KKKKKK..'
+  '..KK..KK..KK..',
+  '.KWWKKWWKKWWK.',
+  'KWWWWWWWWWWWWK',
+  'KWWLWWLWWLWWLK',
+  '.KWWWWWWWWWWK.',
+  '..KWWWWWWWWK..',
+  '..KUUUUUUUUK..',
+  '..KBBBBBBBBK..',
+  '.KBBBBBBBBHHK.',
+  '.KBBBBBBBBBBK.',
+  '.KDBBBBBBBBBK.',
+  '.KDBBBBBBBBBK.',
+  '.KDDDDDDDDDDK.',
+  '..KKKKKKKKKK..'
 ];
 
 const SANS_ARM_RIGHT_GRID = [
-  '............KKKK..',
-  '...KKKKKKKKKWWWWK.',
-  '.KKHHHHHHHHBWWWWWK',
-  'KBBBBBBBBBBBWWLWWK',
-  'KBBBBBBBBBBBWWWWK.',
-  'KDDDDDDDDDDDKWWK..',
-  '.KKKKKKKKKKKKKK...'
+  '..............KKKK....',
+  '...KKKKKKKKKKKWWWWK...',
+  '.KKHHHHHHHHHHHWWWWWWK.',
+  'KBBBBBBBBBBBBBUWWLWWWK',
+  'KBBBBBBBBBBBBBWWWWWWK.',
+  'KDDDDDDDDDDDDDKUWWKK..',
+  '.KKKKKKKKKKKKKKKK.....'
 ];
 
 const SANS_ARM_LEFT_GRID = flipGridH(SANS_ARM_RIGHT_GRID);
 const SANS_ARM_DOWN_GRID = rotateGrid180(SANS_HAND_UP_GRID);
 
 const SANS_SHRUG_HAND_LEFT = [
-  '.K.K.K..',
-  'KWWWWWKK',
-  'KWWWWWWK',
-  '.KWWWWK.',
-  '.KBBBBK.',
-  'KBBBBBBK',
-  'KDDDDDK.',
-  '.KKKKK..'
+  '.K.K.K.K..',
+  'KWWWWWWWKK',
+  'KWWWWWWWWK',
+  '.KWWWWWWK.',
+  '.KUUUUUUK.',
+  'KBBBBBBBBK',
+  'KDDDDDDDK.',
+  '.KKKKKKK..'
 ];
 const SANS_SHRUG_HAND_RIGHT = flipGridH(SANS_SHRUG_HAND_LEFT);
 
-// 28x14 Shorts & Pink Slippers
+// 34x18 Baggy Striped Shorts, Tibia Shins & Plush Pink Slippers (@2x = 68x36)
 const SANS_LEGS_GRID = [
-  '..KKKKKKKKKKKKKKKKKKKKKKKK..',
-  '.KWWSSSSSSSSSSSSSSSSSSSSWWK.',
-  '.KWWSSSSSSSSLLSSSSSSSSSSWWK.',
-  '.KWWSSSSSSSSSSSSSSSSSSSSWWK.',
-  '.KWWSSSSSSSSSSKKSSSSSSSSWWK.',
-  '..KKWSSSSSSSKK..KKSSSSSSWKK.',
-  '...KKKKKKKKK......KKKKKKKKK.',
-  '.....KWWWWK........KWWWWK...',
-  '.....KWLLWK........KWLLWK...',
-  '....KKWWWWKK......KKWWWWKK..',
-  '..KKPPPPPPPPK....KPPPPPPPPKK',
-  '.KWWPPPPPPPPK....KPPPPPPPPWW',
-  '.KPQQQQQQQQPK....KPQQQQQQQQP',
-  '..KKKKKKKKKK......KKKKKKKKKK'
+  '..KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK..',
+  '.KWWSSSSSSSSSSXXXXXXSSSSSSSSSSWWK.',
+  '.KWWSSSSSSSSSSLLWWLLSSSSSSSSSSWWK.',
+  '.KWWSSSSSSSSSSXXXXXXSSSSSSSSSSWWK.',
+  '.KWWSSSSSSSSSSSSSSSSSSSSSSSSSSWWK.',
+  '..KWWSSSSSSSSSSKKKKSSSSSSSSSSWWK..',
+  '...KKSSSSSSSSKK....KKSSSSSSSSKK...',
+  '....KKKKKKKKK........KKKKKKKKK....',
+  '......KWWWWK..........KWWWWK......',
+  '......KWLLWK..........KWLLWK......',
+  '......KWLLWK..........KWLLWK......',
+  '.....KKWWWWKK........KKWWWWKK.....',
+  '..KKKPPPPPPPPKK....KKPPPPPPPPKKK..',
+  '.KWPPPPPPOOOOPK....KPOOOOPPPPPPWK.',
+  '.KPOOOOOOOOOOPK....KPOOOOOOOOOOPK.',
+  '.KPQQQQQQQQQQPK....KPQQQQQQQQQQPK.',
+  '..KKKKKKKKKKKK......KKKKKKKKKKKK..',
+  '..................................'
 ];
 
 const SANS_SWEAT_GRID = [
@@ -1065,30 +1082,35 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
     ctx.globalAlpha = 1;
   }
 
-  // 1. Shorts & Pink Slippers (28x14 @ 2x = 56x28)
-  const legsX = x - 28;
-  const legsY = y - 28;
-  const legsSpr = drawPixelGrid(SANS_LEGS_GRID, SANS_PAL, scale, 'sans-b-legs');
+  // Subtle pixel floor shadow under slippers
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillRect(x - 36, y - 4, 72, 6);
+  ctx.fillRect(x - 30, y - 6, 60, 2);
+
+  // 1. Shorts & Plush Pink Slippers (34x18 @ 2x = 68x36)
+  const legsX = x - 34;
+  const legsY = y - 36;
+  const legsSpr = drawPixelGrid(SANS_LEGS_GRID, SANS_PAL, scale, 'sans-b-legs-v2');
   if (legsSpr) {
     ctx.drawImage(legsSpr, legsX, legsY);
   }
 
-  // 2. Hoodie & Ribcage Torso (36x24 @ 2x = 72x48)
+  // 2. Fur-Hood Parka & Ribcage Torso (44x28 @ 2x = 88x56)
   const tx = Math.round(x + swayX * 0.6);
-  const ty = Math.round(y - 72 + torsoBobY);
-  const torsoX = tx - 36;
+  const ty = Math.round(y - 84 + torsoBobY);
+  const torsoX = tx - 44;
 
   let torsoGrid = SANS_TORSO_POCKETS;
-  let torsoKey = 'pockets';
+  let torsoKey = 'pockets-v2';
   if (pose === 'damaged') {
     torsoGrid = SANS_TORSO_DAMAGED;
-    torsoKey = 'damaged';
+    torsoKey = 'damaged-v2';
   } else if (pose === 'shrug') {
     torsoGrid = SANS_TORSO_SHRUG;
-    torsoKey = 'shrug';
+    torsoKey = 'shrug-v2';
   } else if (phase >= 3) {
     torsoGrid = SANS_TORSO_SCAR_P3;
-    torsoKey = 'scar-p3';
+    torsoKey = 'scar-p3-v2';
   }
 
   const torsoSpr = drawPixelGrid(torsoGrid, SANS_PAL, scale, `sans-b-torso-${torsoKey}`);
@@ -1100,21 +1122,20 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
   if (phase >= 2 && !isSleeping) {
     const rimClr = phase >= 5 ? '#e879f9' : phase >= 3 ? '#ff3c3c' : '#2ce8f5';
     ctx.fillStyle = rimClr;
-    ctx.globalAlpha = 0.7 + Math.sin(time * 8) * 0.2;
-    // Left & right hoodie shoulder pixel rims
-    ctx.fillRect(torsoX + 2, ty + 6, 2, 16);
-    ctx.fillRect(torsoX + 68, ty + 6, 2, 16);
-    ctx.fillRect(torsoX + 4, ty + 2, 10, 2);
-    ctx.fillRect(torsoX + 58, ty + 2, 10, 2);
+    ctx.globalAlpha = 0.72 + Math.sin(time * 8) * 0.2;
+    ctx.fillRect(torsoX + 2, ty + 14, 2, 18);
+    ctx.fillRect(torsoX + 84, ty + 14, 2, 18);
+    ctx.fillRect(torsoX + 8, ty + 8, 12, 2);
+    ctx.fillRect(torsoX + 68, ty + 8, 12, 2);
     ctx.globalAlpha = 1;
   }
 
   if ((phase >= 3 || pose === 'damaged') && !isSleeping) {
-    for (let e = 0; e < 5; e++) {
-      const cycle = (time * 2.6 + e * 0.23) % 1;
-      const ex = torsoX + 26 + e * 4 + Math.round(Math.sin(time * 9 + e) * 2);
-      const ey = ty + 28 - Math.round(cycle * 16);
-      ctx.globalAlpha = (1 - cycle) * 0.9;
+    for (let e = 0; e < 6; e++) {
+      const cycle = (time * 2.6 + e * 0.21) % 1;
+      const ex = torsoX + 30 + e * 5 + Math.round(Math.sin(time * 9 + e) * 2);
+      const ey = ty + 32 - Math.round(cycle * 18);
+      ctx.globalAlpha = (1 - cycle) * 0.92;
       ctx.fillStyle = cycle < 0.3 ? '#fff3a8' : (e % 2 === 0 ? '#ff3c3c' : '#ff8c24');
       ctx.fillRect(Math.round(ex / 2) * 2, Math.round(ey / 2) * 2, 2, 2);
     }
@@ -1125,49 +1146,79 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
   if (phase >= 2 && !isSleeping) {
     const flutter = Math.round(Math.sin(time * 9.5) * 2);
     ctx.fillStyle = '#1b50a8';
-    ctx.fillRect(torsoX + 4, ty + 44, 6, 4 + (flutter > 0 ? 2 : 0));
-    ctx.fillRect(torsoX + 62, ty + 44, 6, 4 + (flutter < 0 ? 2 : 0));
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(torsoX + 18 + (flutter > 0 ? 2 : 0), ty + 2, 4, 4);
+    ctx.fillRect(torsoX + 6, ty + 48, 8, 4 + (flutter > 0 ? 2 : 0));
+    ctx.fillRect(torsoX + 74, ty + 48, 8, 4 + (flutter < 0 ? 2 : 0));
+    ctx.fillStyle = '#f4f6fc';
+    ctx.fillRect(torsoX + 20 + (flutter > 0 ? 2 : 0), ty + 4, 6, 4);
   }
 
-  // Pose-specific extended pixel-grid limbs (snapped cleanly to 2x grid)
+  // Pose-specific extended pixel-grid limbs & telekinetic slam rings
+  let magicHandPos = null;
   if (pose === 'shrug') {
-    const lh = drawPixelGrid(SANS_SHRUG_HAND_LEFT, SANS_PAL, scale, 'sans-shrug-l');
-    const rh = drawPixelGrid(SANS_SHRUG_HAND_RIGHT, SANS_PAL, scale, 'sans-shrug-r');
-    if (lh) ctx.drawImage(lh, tx - 48, ty + 4);
-    if (rh) ctx.drawImage(rh, tx + 32, ty + 4);
+    const lh = drawPixelGrid(SANS_SHRUG_HAND_LEFT, SANS_PAL, scale, 'sans-shrug-l-v2');
+    const rh = drawPixelGrid(SANS_SHRUG_HAND_RIGHT, SANS_PAL, scale, 'sans-shrug-r-v2');
+    if (lh) ctx.drawImage(lh, tx - 60, ty + 4);
+    if (rh) ctx.drawImage(rh, tx + 40, ty + 4);
   } else if (pose === 'slamUp') {
-    const upArm = drawPixelGrid(SANS_HAND_UP_GRID, SANS_PAL, scale, 'sans-arm-up');
-    if (upArm) ctx.drawImage(upArm, tx + 26, ty - 16);
+    const upArm = drawPixelGrid(SANS_HAND_UP_GRID, SANS_PAL, scale, 'sans-arm-up-v2');
+    if (upArm) ctx.drawImage(upArm, tx + 32, ty - 22);
+    magicHandPos = { hx: tx + 46, hy: ty - 24 };
   } else if (pose === 'slamDown') {
-    const downArm = drawPixelGrid(SANS_ARM_DOWN_GRID, SANS_PAL, scale, 'sans-arm-down');
-    if (downArm) ctx.drawImage(downArm, tx + 26, ty + 18);
+    const downArm = drawPixelGrid(SANS_ARM_DOWN_GRID, SANS_PAL, scale, 'sans-arm-down-v2');
+    if (downArm) ctx.drawImage(downArm, tx + 32, ty + 20);
+    magicHandPos = { hx: tx + 46, hy: ty + 46 };
   } else if (pose === 'slamRight') {
-    const rArm = drawPixelGrid(SANS_ARM_RIGHT_GRID, SANS_PAL, scale, 'sans-arm-right');
-    if (rArm) ctx.drawImage(rArm, tx + 26, ty + 10);
+    const rArm = drawPixelGrid(SANS_ARM_RIGHT_GRID, SANS_PAL, scale, 'sans-arm-right-v2');
+    if (rArm) ctx.drawImage(rArm, tx + 32, ty + 12);
+    magicHandPos = { hx: tx + 74, hy: ty + 18 };
   } else if (pose === 'slamLeft') {
-    const lArm = drawPixelGrid(SANS_ARM_LEFT_GRID, SANS_PAL, scale, 'sans-arm-left');
-    if (lArm) ctx.drawImage(lArm, tx - 62, ty + 10);
+    const lArm = drawPixelGrid(SANS_ARM_LEFT_GRID, SANS_PAL, scale, 'sans-arm-left-v2');
+    if (lArm) ctx.drawImage(lArm, tx - 76, ty + 12);
+    magicHandPos = { hx: tx - 74, hy: ty + 18 };
   }
 
-  // 3. Skull Head (28x24 @ 2x = 56x48)
+  if (magicHandPos) {
+    const ringClr = phase >= 4 ? '#e879f9' : '#2ce8f5';
+    const r = 10 + Math.round(Math.sin(time * 16) * 2);
+    ctx.strokeStyle = ringClr;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.72;
+    ctx.strokeRect(magicHandPos.hx - r, magicHandPos.hy - r, r * 2, r * 2);
+    ctx.globalAlpha = 1;
+  }
+
+  // 3. Sculpted Skull Head (34x26 @ 2x = 68x52)
   const hx = Math.round(x + swayX);
-  const hy = Math.round(y - 110 + headBobY);
-  const headX = hx - 28;
+  const hy = Math.round(y - 126 + headBobY);
+  const headX = hx - 34;
 
   let headKey = expression;
   if (expression === 'blueEye') {
     const isYellow = Math.floor(time * 16) % 2 === 0;
     headKey = isYellow ? 'blueEyeYellow' : 'blueEyeCyan';
+  } else if ((expression === 'normal' || expression === 'tired') && (time % 4.6) > 4.46) {
+    headKey = 'closed';
   } else if (!SANS_HEAD_VARIANTS[headKey]) {
     headKey = 'normal';
   }
 
   const headGrid = SANS_HEAD_VARIANTS[headKey];
-  const headSpr = drawPixelGrid(headGrid, SANS_PAL, scale, `sans-b-head-${headKey}`);
+  const headSpr = drawPixelGrid(headGrid, SANS_PAL, scale, `sans-b-head-v2-${headKey}`);
   if (headSpr) {
     ctx.drawImage(headSpr, headX, hy);
+  }
+
+  // Subtle living eye gaze micro-tracking in idle normal pose
+  if (headKey === 'normal') {
+    const lookShift = Math.round(Math.sin(time * 1.3)) * 2;
+    if (lookShift !== 0) {
+      ctx.fillStyle = '#07070c';
+      ctx.fillRect(headX + 20, hy + 20, 4, 4);
+      ctx.fillRect(headX + 44, hy + 20, 4, 4);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(headX + 20 + lookShift, hy + 20, 4, 4);
+      ctx.fillRect(headX + 44 + lookShift, hy + 20, 4, 4);
+    }
   }
 
   // Phase skull dome rim highlight
@@ -1175,15 +1226,15 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
     const skullRim = phase >= 5 ? '#e879f9' : phase >= 3 ? '#ff4d4d' : '#2ce8f5';
     ctx.fillStyle = skullRim;
     ctx.globalAlpha = 0.65;
-    ctx.fillRect(headX + 12, hy, 32, 2);
-    ctx.fillRect(headX + 4, hy + 8, 2, 14);
-    ctx.fillRect(headX + 50, hy + 8, 2, 14);
+    ctx.fillRect(headX + 14, hy, 40, 2);
+    ctx.fillRect(headX + 4, hy + 10, 2, 16);
+    ctx.fillRect(headX + 62, hy + 10, 2, 16);
     ctx.globalAlpha = 1;
   }
 
   // Phase 2/3 jagged skull crack overlay (when not already cracked/sleeping)
   if (phase >= 2 && expression !== 'cracked' && !isSleeping) {
-    const crackSpr = drawPixelGrid(SANS_CRACK_OVERLAY, SANS_PAL, scale, 'sans-b-crack');
+    const crackSpr = drawPixelGrid(SANS_CRACK_OVERLAY, SANS_PAL, scale, 'sans-b-crack-v2');
     if (crackSpr) {
       ctx.drawImage(crackSpr, headX, hy);
     }
@@ -1196,19 +1247,17 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
     const eyeOuter = isYellow ? '#ff8c1a' : '#0072e5';
     const eyeHot = '#ffffff';
 
-    // Crisp pupil crosshair glints
     ctx.fillStyle = eyeMain;
-    ctx.fillRect(hx + 6, hy + 18, 12, 2);
-    ctx.fillRect(hx + 11, hy + 13, 2, 12);
+    ctx.fillRect(hx + 6, hy + 20, 14, 2);
+    ctx.fillRect(hx + 12, hy + 14, 2, 14);
     ctx.fillStyle = eyeHot;
-    ctx.fillRect(hx + 10, hy + 17, 4, 4);
+    ctx.fillRect(hx + 11, hy + 19, 4, 4);
 
-    // 12-segment swirling multi-layer pixel flame ribbon
     for (let i = 0; i < 12; i++) {
       const t = ((time * 5.2 + i * 0.085) % 1);
       const sway = Math.sin(time * 20 + i * 0.75) * (2 + t * 5);
-      const px = Math.round((hx + 11 + t * 22 + sway) / 2) * 2;
-      const py = Math.round((hy + 20 - t * 32) / 2) * 2;
+      const px = Math.round((hx + 12 + t * 24 + sway) / 2) * 2;
+      const py = Math.round((hy + 22 - t * 34) / 2) * 2;
 
       if (t < 0.75) {
         ctx.globalAlpha = Math.max(0.15, (1 - t) * 0.7);
@@ -1228,7 +1277,7 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
     const dropStep = Math.floor(((time * 24) % 12) / 2) * 2;
     const sweatSpr = drawPixelGrid(SANS_SWEAT_GRID, SANS_PAL, scale, 'sans-b-sweat');
     if (sweatSpr) {
-      ctx.drawImage(sweatSpr, headX + 2, hy + 8 + dropStep);
+      ctx.drawImage(sweatSpr, headX + 4, hy + 10 + dropStep);
     }
   }
 
@@ -1239,11 +1288,11 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
     const zFloat = (time * 18) % 24;
     if (zSprBig) {
       ctx.globalAlpha = Math.max(0.15, 1 - zFloat / 24);
-      ctx.drawImage(zSprBig, Math.round(hx + 24 + zFloat * 0.5), Math.round(hy - 4 - zFloat));
+      ctx.drawImage(zSprBig, Math.round(hx + 28 + zFloat * 0.5), Math.round(hy - 4 - zFloat));
     }
     if (zSprSm) {
       ctx.globalAlpha = 0.85;
-      ctx.drawImage(zSprSm, Math.round(hx + 38 + zFloat * 0.3), Math.round(hy - 16 - zFloat * 0.6));
+      ctx.drawImage(zSprSm, Math.round(hx + 44 + zFloat * 0.3), Math.round(hy - 16 - zFloat * 0.6));
     }
     ctx.globalAlpha = 1;
   }
@@ -1252,9 +1301,9 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
   if (flashAlpha > 0) {
     const whitePal = makeWhiteSilhouettePalette(SANS_PAL);
     ctx.globalAlpha = Math.min(1, flashAlpha);
-    const wLegs = drawPixelGrid(SANS_LEGS_GRID, whitePal, scale, 'sans-w-legs');
-    const wTorso = drawPixelGrid(torsoGrid, whitePal, scale, `sans-w-torso-${torsoKey}`);
-    const wHead = drawPixelGrid(headGrid, whitePal, scale, `sans-w-head-${headKey}`);
+    const wLegs = drawPixelGrid(SANS_LEGS_GRID, whitePal, scale, 'sans-w-legs-v2');
+    const wTorso = drawPixelGrid(torsoGrid, whitePal, scale, `sans-w-torso-v2-${torsoKey}`);
+    const wHead = drawPixelGrid(headGrid, whitePal, scale, `sans-w-head-v2-${headKey}`);
     if (wLegs) ctx.drawImage(wLegs, legsX, legsY);
     if (wTorso) ctx.drawImage(wTorso, torsoX, ty);
     if (wHead) ctx.drawImage(wHead, headX, hy);

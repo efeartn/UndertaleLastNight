@@ -353,6 +353,9 @@ export class AttackRunner {
     if (builder) {
       builder(this, options);
     }
+    if (Number.isFinite(options.durationMult) && options.durationMult < 1 && this.id !== 'finalGambitAndSleep') {
+      this.duration = Math.max(4.0, Number((this.duration * options.durationMult).toFixed(2)));
+    }
     this.currentSoulMode = this.initialSoulMode;
 
     if (this.spawnGreenBonus && this.id !== 'finalGambitAndSleep') {
