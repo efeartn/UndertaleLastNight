@@ -2,7 +2,7 @@
 
 import { ATTACK_META } from './attacks.js';
 import { TRACK_CATALOG, audio } from './audio.js';
-import { ACHIEVEMENT_DEFS, BattleEngine } from './battle.js';
+import { ACHIEVEMENT_DEFS, BattleEngine, DIFFICULTIES } from './battle.js';
 import { OverworldEngine } from './overworld.js';
 import { SOUL_SKINS, drawSansBattle, drawSoul } from './sprites.js';
 
@@ -15,6 +15,9 @@ class InputManager {
     this.virtualHeld = new Set();
     this.virtualSources = new Map();
     this.prevPadButtons = {};
+    this.analogX = 0;
+    this.analogY = 0;
+    this.analogActive = false;
   }
 
   triggerPress(code) {
@@ -57,12 +60,45 @@ class InputManager {
     this.setPointerVirtual('default', code, down);
   }
 
+  setAnalogVector(dx, dy, { snapCardinal = true, sourceId = 'vstick' } = {}) {
+    const mag = Math.hypot(dx, dy);
+    if (!Number.isFinite(mag) || mag < 0.16) {
+      this.analogX = 0;
+      this.analogY = 0;
+      this.analogActive = false;
+      this.setPointerVirtual(sourceId, 'ArrowLeft', false);
+      this.setPointerVirtual(sourceId, 'ArrowRight', false);
+      this.setPointerVirtual(sourceId, 'ArrowUp', false);
+      this.setPointerVirtual(sourceId, 'ArrowDown', false);
+      return;
+    }
+
+    const clampedMag = Math.min(1, mag);
+    let ux = dx / mag;
+    let uy = dy / mag;
+    if (snapCardinal) {
+      const ang = Math.atan2(uy, ux);
+      const snapRad = (26 * Math.PI) / 180;
+      const nearestCardinal = Math.round(ang / (Math.PI / 2)) * (Math.PI / 2);
+      if (Math.abs(ang - nearestCardinal) <= snapRad) {
+        ux = Math.round(Math.cos(nearestCardinal));
+        uy = Math.round(Math.sin(nearestCardinal));
+      }
+    }
+
+    this.analogX = ux * clampedMag;
+    this.analogY = uy * clampedMag;
+    this.analogActive = true;
+
+    const dead = 0.30;
+    this.setPointerVirtual(sourceId, 'ArrowLeft', this.analogX < -dead);
+    this.setPointerVirtual(sourceId, 'ArrowRight', this.analogX > dead);
+    this.setPointerVirtual(sourceId, 'ArrowUp', this.analogY < -dead);
+    this.setPointerVirtual(sourceId, 'ArrowDown', this.analogY > dead);
+  }
+
   setJoystickVector(dx, dy) {
-    const dead = 0.26;
-    this.setPointerVirtual('vstick', 'ArrowLeft', dx < -dead);
-    this.setPointerVirtual('vstick', 'ArrowRight', dx > dead);
-    this.setPointerVirtual('vstick', 'ArrowUp', dy < -dead);
-    this.setPointerVirtual('vstick', 'ArrowDown', dy > dead);
+    this.setAnalogVector(dx, dy, { snapCardinal: true, sourceId: 'vstick' });
   }
 
   pollGamepad() {
@@ -126,6 +162,7 @@ export class UndertaleLastNightGame {
     this.mode = 'TITLE'; // TITLE | CONTROLS_LORE | ATTACK_SELECT | OVERWORLD | BATTLE
     this.titleIndex = 0;
     this.attackSelectIndex = 0;
+    this.attackSelectPage = 0;
     this.customSpeedMult = 1.0;
     this.time = 0;
     this.hasSave = false;
@@ -135,6 +172,7 @@ export class UndertaleLastNightGame {
     this._titleRects = [];
     this._attackCardRects = [];
     this._attackBarButtons = [];
+    this._attackPageButtons = [];
     this._onHudSync = null;
 
     this.overworld = new OverworldEngine({
@@ -305,9 +343,20 @@ export class UndertaleLastNightGame {
     audio.menuMove();
   }
 
+  cycleDifficulty() {
+    const order = ['normal', 'hard', 'nightmare'];
+    const idx = order.indexOf(this.battle.difficulty);
+    const nextId = order[(idx + 1) % order.length];
+    this.battle.setDifficulty(nextId);
+    audio.menuMove();
+    this._onHudSync?.();
+    return nextId;
+  }
+
   openAttackSelect() {
     audio.ensureContext();
     audio.stopBGM();
+    this.attackSelectPage = Math.floor((this.attackSelectIndex || 0) / 12);
     this.mode = 'ATTACK_SELECT';
   }
 
@@ -392,6 +441,12 @@ export class UndertaleLastNightGame {
         }
       }
     } else if (this.mode === 'ATTACK_SELECT') {
+      for (const btn of this._attackPageButtons) {
+        if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+          btn.action();
+          return;
+        }
+      }
       for (const btn of this._attackBarButtons) {
         if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
           btn.action();
@@ -401,6 +456,7 @@ export class UndertaleLastNightGame {
       for (const r of this._attackCardRects) {
         if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
           this.attackSelectIndex = r.idx;
+          this.attackSelectPage = Math.floor(r.idx / 12);
           audio.menuSelect();
           this.startAttackPractice(r.idx);
           return;
@@ -464,12 +520,16 @@ export class UndertaleLastNightGame {
   _updateAttackSelect() {
     const count = ATTACK_META.length;
     if (count === 0) return;
+    const PER_PAGE = 12;
+    const pageCount = Math.max(1, Math.ceil(count / PER_PAGE));
 
     if (this.input.justPressed('ArrowLeft') || this.input.justPressed('KeyA')) {
       this.attackSelectIndex = (this.attackSelectIndex - 1 + count) % count;
+      this.attackSelectPage = Math.floor(this.attackSelectIndex / PER_PAGE);
       audio.menuMove();
     } else if (this.input.justPressed('ArrowRight') || this.input.justPressed('KeyD')) {
       this.attackSelectIndex = (this.attackSelectIndex + 1) % count;
+      this.attackSelectPage = Math.floor(this.attackSelectIndex / PER_PAGE);
       audio.menuMove();
     } else if (this.input.justPressed('ArrowUp') || this.input.justPressed('KeyW')) {
       let next = this.attackSelectIndex - 2;
@@ -479,6 +539,7 @@ export class UndertaleLastNightGame {
         while (next % 2 !== col && next > 0) next -= 1;
       }
       this.attackSelectIndex = next;
+      this.attackSelectPage = Math.floor(this.attackSelectIndex / PER_PAGE);
       audio.menuMove();
     } else if (this.input.justPressed('ArrowDown') || this.input.justPressed('KeyS')) {
       let next = this.attackSelectIndex + 2;
@@ -486,6 +547,15 @@ export class UndertaleLastNightGame {
         next = this.attackSelectIndex % 2;
       }
       this.attackSelectIndex = next;
+      this.attackSelectPage = Math.floor(this.attackSelectIndex / PER_PAGE);
+      audio.menuMove();
+    } else if (this.input.justPressed('PageUp') || this.input.justPressed('KeyQ')) {
+      this.attackSelectPage = (this.attackSelectPage - 1 + pageCount) % pageCount;
+      this.attackSelectIndex = Math.min(count - 1, this.attackSelectPage * PER_PAGE);
+      audio.menuMove();
+    } else if (this.input.justPressed('PageDown') || this.input.justPressed('KeyE')) {
+      this.attackSelectPage = (this.attackSelectPage + 1) % pageCount;
+      this.attackSelectIndex = Math.min(count - 1, this.attackSelectPage * PER_PAGE);
       audio.menuMove();
     } else if (this.input.justPressed('KeyC')) {
       this.cycleSpeedMultiplier();
@@ -625,20 +695,78 @@ export class UndertaleLastNightGame {
     ctx.fillStyle = '#06060d';
     ctx.fillRect(0, 0, 640, 480);
 
+    const PER_PAGE = 12;
+    const total = ATTACK_META.length;
+    const pageCount = Math.max(1, Math.ceil(total / PER_PAGE));
+    const page = Math.max(0, Math.min(pageCount - 1, this.attackSelectPage || 0));
+    const startIdx = page * PER_PAGE;
+    const slice = ATTACK_META.slice(startIdx, startIdx + PER_PAGE);
+
     ctx.save();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffef3f';
     ctx.font = '13px "Press Start 2P", monospace';
-    ctx.fillText('ATTACK PRACTICE SELECT', 320, 26);
+    ctx.fillText('ATTACK PRACTICE SELECT', 320, 24);
 
     const noHitCount = this.battle.noHitAttacks.size;
     ctx.fillStyle = '#9898ad';
     ctx.font = '8px "Press Start 2P", monospace';
     ctx.fillText(
-      `${ATTACK_META.length} Patterns (Phases 1-5)   |   ★ NO-HIT: ${noHitCount}/${ATTACK_META.length}`,
+      `${total} Patterns (Phases 1-5)  |  ★ NO-HIT: ${noHitCount}/${total}  |  PAGE ${page + 1}/${pageCount}`,
       320,
-      44
+      40
     );
+
+    const diffSpec = DIFFICULTIES[this.battle.difficulty] || DIFFICULTIES.hard;
+    this._attackPageButtons = [
+      {
+        x: 24,
+        y: 47,
+        w: 98,
+        h: 20,
+        color: '#2ce8f5',
+        label: '< [Q] PREV',
+        action: () => {
+          this.attackSelectPage = (page - 1 + pageCount) % pageCount;
+          this.attackSelectIndex = Math.min(total - 1, this.attackSelectPage * PER_PAGE);
+          audio.menuMove();
+        }
+      },
+      {
+        x: 210,
+        y: 47,
+        w: 220,
+        h: 20,
+        color: diffSpec.color,
+        label: `DIFF: ${diffSpec.label}`,
+        action: () => this.cycleDifficulty()
+      },
+      {
+        x: 518,
+        y: 47,
+        w: 98,
+        h: 20,
+        color: '#2ce8f5',
+        label: 'NEXT [E] >',
+        action: () => {
+          this.attackSelectPage = (page + 1) % pageCount;
+          this.attackSelectIndex = Math.min(total - 1, this.attackSelectPage * PER_PAGE);
+          audio.menuMove();
+        }
+      }
+    ];
+
+    for (const pb of this._attackPageButtons) {
+      ctx.fillStyle = '#0f101d';
+      ctx.fillRect(pb.x, pb.y, pb.w, pb.h);
+      ctx.strokeStyle = pb.color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(pb.x, pb.y, pb.w, pb.h);
+      ctx.fillStyle = pb.color;
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(pb.label, pb.x + pb.w / 2, pb.y + 14);
+    }
 
     const phaseColors = {
       1: '#cbd5e1',
@@ -658,17 +786,18 @@ export class UndertaleLastNightGame {
     };
 
     const startX = 24;
-    const startY = 54;
+    const startY = 74;
     const cardW = 290;
-    const cardH = 27;
+    const cardH = 38;
     const gapX = 12;
-    const gapY = 3;
+    const gapY = 6;
 
     this._attackCardRects = [];
 
-    ATTACK_META.forEach((item, idx) => {
-      const col = idx % 2;
-      const row = Math.floor(idx / 2);
+    slice.forEach((item, localIdx) => {
+      const idx = startIdx + localIdx;
+      const col = localIdx % 2;
+      const row = Math.floor(localIdx / 2);
       const x = startX + col * (cardW + gapX);
       const y = startY + row * (cardH + gapY);
       const selected = idx === this.attackSelectIndex;
@@ -683,12 +812,12 @@ export class UndertaleLastNightGame {
       ctx.strokeRect(x, y, cardW, cardH);
 
       if (selected) {
-        drawSoul(ctx, x + 11, y + 13.5, 'red', { scale: 0.6 });
+        drawSoul(ctx, x + 12, y + 19, 'red', { scale: 0.65 });
       } else {
         ctx.fillStyle = noHitCleared ? '#facc15' : '#334155';
-        ctx.font = '9px "Press Start 2P", monospace';
+        ctx.font = '10px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(noHitCleared ? '★' : '·', x + 11, y + 17);
+        ctx.fillText(noHitCleared ? '★' : '·', x + 12, y + 23);
       }
 
       const pColor = phaseColors[item.phase] || '#ffffff';
@@ -698,48 +827,52 @@ export class UndertaleLastNightGame {
       // Attack index & title measured safely so it never overlaps right-side badges
       ctx.textAlign = 'left';
       ctx.fillStyle = selected ? '#ffef3f' : '#f1f5f9';
-      ctx.font = '14px "VT323", "Courier New", monospace';
+      ctx.font = '16px "VT323", "Courier New", monospace';
       const label = `#${item.index + 1} ${item.title}`;
-      const maxTitleW = cardW - 120;
+      const maxTitleW = cardW - 124;
       const shownTitle = this._fitText(ctx, label, maxTitleW);
-      ctx.fillText(shownTitle, x + 21, y + 18);
+      ctx.fillText(shownTitle, x + 23, y + 19);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '12px "VT323", "Courier New", monospace';
+      ctx.fillText(this._fitText(ctx, item.desc || '', cardW - 32), x + 23, y + 33);
 
       // Difficulty badge
       ctx.fillStyle = 'rgba(255, 239, 63, 0.08)';
-      ctx.fillRect(x + cardW - 97, y + 5, 25, 17);
+      ctx.fillRect(x + cardW - 97, y + 5, 25, 16);
       ctx.strokeStyle = '#854d0e';
       ctx.lineWidth = 1;
-      ctx.strokeRect(x + cardW - 97, y + 5, 25, 17);
+      ctx.strokeRect(x + cardW - 97, y + 5, 25, 16);
       ctx.textAlign = 'center';
       ctx.fillStyle = '#facc15';
       ctx.font = '7px "Press Start 2P", monospace';
-      ctx.fillText(`${item.stars || 3}★`, x + cardW - 84.5, y + 17);
+      ctx.fillText(`${item.stars || 3}★`, x + cardW - 84.5, y + 16);
 
       // Phase badge
       ctx.fillStyle = 'rgba(255,255,255,0.08)';
-      ctx.fillRect(x + cardW - 69, y + 5, 25, 17);
+      ctx.fillRect(x + cardW - 69, y + 5, 25, 16);
       ctx.strokeStyle = pColor;
-      ctx.strokeRect(x + cardW - 69, y + 5, 25, 17);
+      ctx.strokeRect(x + cardW - 69, y + 5, 25, 16);
       ctx.fillStyle = pColor;
       ctx.font = '8px "Press Start 2P", monospace';
-      ctx.fillText(`P${item.phase}`, x + cardW - 56.5, y + 17);
+      ctx.fillText(`P${item.phase}`, x + cardW - 56.5, y + 16);
 
       // SOUL mode badge
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(x + cardW - 41, y + 5, 34, 17);
+      ctx.fillRect(x + cardW - 41, y + 5, 34, 16);
       ctx.strokeStyle = sColor;
-      ctx.strokeRect(x + cardW - 41, y + 5, 34, 17);
+      ctx.strokeRect(x + cardW - 41, y + 5, 34, 16);
       ctx.fillStyle = sColor;
-      ctx.fillText(modeKey.slice(0, 3).toUpperCase(), x + cardW - 24, y + 17);
+      ctx.fillText(modeKey.slice(0, 3).toUpperCase(), x + cardW - 24, y + 16);
     });
 
     // Selected Attack Detail Box
     const sel = ATTACK_META[this.attackSelectIndex];
     ctx.fillStyle = '#0a0a12';
-    ctx.fillRect(24, 360, 592, 66);
+    ctx.fillRect(24, 348, 592, 76);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
-    ctx.strokeRect(24, 360, 592, 66);
+    ctx.strokeRect(24, 348, 592, 76);
 
     if (sel) {
       const noHitStr = this.battle.noHitAttacks.has(sel.index) ? '  ★ NO-HIT' : '';
@@ -750,18 +883,18 @@ export class UndertaleLastNightGame {
       ctx.fillText(
         `#${sel.index + 1} ${sel.title}  |  PHASE ${sel.phase}  |  ${String(sel.soulMode || 'red').toUpperCase()}${noHitStr}`,
         38,
-        380
+        369
       );
       ctx.textAlign = 'right';
       ctx.fillStyle = '#facc15';
-      ctx.fillText(starsStr, 602, 380);
+      ctx.fillText(starsStr, 602, 369);
 
       ctx.textAlign = 'left';
       ctx.fillStyle = '#e2e8f0';
       ctx.font = '16px "VT323", "Courier New", monospace';
       const descLines = this._wrapText(ctx, sel.desc || 'Practice this attack pattern.', 562);
       descLines.slice(0, 2).forEach((ln, i) => {
-        ctx.fillText(ln, 38, 401 + i * 16);
+        ctx.fillText(ln, 38, 392 + i * 17);
       });
     }
 
@@ -794,7 +927,7 @@ export class UndertaleLastNightGame {
         w: 154,
         h: 28,
         color: '#fb923c',
-        label: `BOSS RUSH (${ATTACK_META.length})`,
+        label: `BOSS RUSH (${total})`,
         action: () => {
           audio.menuSelect();
           this.startBossRush();
@@ -969,6 +1102,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       const down = (ev) => {
         ev.preventDefault();
         ensureTitleMusic();
+        btn.setPointerCapture?.(ev.pointerId);
         btn.classList.add('active-touch');
         game.input.setPointerVirtual(`p${ev.pointerId ?? 'm'}`, code, true);
       };
@@ -980,28 +1114,44 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       btn.addEventListener('pointerdown', down);
       btn.addEventListener('pointerup', up);
       btn.addEventListener('pointercancel', up);
-      btn.addEventListener('pointerleave', up);
+      btn.addEventListener('lostpointercapture', up);
     });
 
-    // Virtual Analog Thumbstick & Joystick/D-Pad Mode Toggle
-    const PAD_MODE_KEY = 'undertale_last_night_pad_mode_v1';
-    const vstickEl = document.getElementById('virtualStick');
-    const vstickNub = document.getElementById('vstickNub');
-    const classicDpad = document.getElementById('classicDpad');
+    // Precision Slide-Touch Cross D-Pad (default) & Full-Grip Floating Analog Stick Toggle
+    const PAD_MODE_KEY = 'undertale_last_night_pad_mode_v2';
+    const crossDpadEl = document.getElementById('crossDpad');
+    const floatStickZone = document.getElementById('floatStickZone');
+    const floatStickRing = document.getElementById('floatStickRing');
+    const floatStickNub = document.getElementById('floatStickNub');
     const btnPadSwap = document.getElementById('btnPadSwap');
     const btnDrawerPadSwap = document.getElementById('btnDrawerPadSwap');
-    let padMode = 'stick';
+    let padMode = 'dpad';
     try {
       const savedPad = localStorage.getItem(PAD_MODE_KEY);
       if (savedPad === 'dpad' || savedPad === 'stick') padMode = savedPad;
     } catch {}
 
+    const clearDpadHighlights = () => {
+      crossDpadEl?.classList.remove('dir-up', 'dir-down', 'dir-left', 'dir-right');
+    };
+
+    const recenterFloatStick = () => {
+      if (floatStickRing) {
+        floatStickRing.style.left = '50%';
+        floatStickRing.style.top = '50%';
+      }
+      if (floatStickNub) {
+        floatStickNub.style.transform = 'translate(0px, 0px)';
+      }
+      floatStickZone?.classList.remove('touching');
+    };
+
     const applyPadMode = () => {
       const useStick = padMode === 'stick';
-      if (vstickEl) vstickEl.classList.toggle('hidden', !useStick);
-      if (classicDpad) classicDpad.classList.toggle('hidden', useStick);
+      if (crossDpadEl) crossDpadEl.classList.toggle('hidden', useStick);
+      if (floatStickZone) floatStickZone.classList.toggle('hidden', !useStick);
       if (btnPadSwap) btnPadSwap.textContent = useStick ? '🕹 Stick' : '✚ D-Pad';
-      if (btnDrawerPadSwap) btnDrawerPadSwap.textContent = useStick ? 'Pad: Virtual Joystick' : 'Pad: Classic D-Pad';
+      if (btnDrawerPadSwap) btnDrawerPadSwap.textContent = useStick ? 'Pad: Floating Stick' : 'Pad: Precision D-Pad';
       try {
         localStorage.setItem(PAD_MODE_KEY, padMode);
       } catch {}
@@ -1009,51 +1159,107 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     applyPadMode();
 
     const togglePadMode = () => {
-      padMode = padMode === 'stick' ? 'dpad' : 'stick';
-      game.input.setJoystickVector(0, 0);
-      if (vstickNub) vstickNub.style.transform = 'translate(0px, 0px)';
+      padMode = padMode === 'dpad' ? 'stick' : 'dpad';
+      clearDpadHighlights();
+      recenterFloatStick();
+      game.input.setAnalogVector(0, 0, { sourceId: 'crossdpad' });
+      game.input.setAnalogVector(0, 0, { sourceId: 'floatstick' });
       applyPadMode();
     };
     btnPadSwap?.addEventListener('click', togglePadMode);
     btnDrawerPadSwap?.addEventListener('click', togglePadMode);
 
-    if (vstickEl && vstickNub) {
-      let stickPointerId = null;
-      const maxR = 34;
-      const updateStick = (ev) => {
-        const rect = vstickEl.getBoundingClientRect();
+    if (crossDpadEl) {
+      let dpadPointerId = null;
+      const updateCrossDpad = (ev) => {
+        const rect = crossDpadEl.getBoundingClientRect();
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
-        let dx = ev.clientX - cx;
-        let dy = ev.clientY - cy;
+        const dx = ev.clientX - cx;
+        const dy = ev.clientY - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 10) {
+          clearDpadHighlights();
+          game.input.setAnalogVector(0, 0, { snapCardinal: true, sourceId: 'crossdpad' });
+          return;
+        }
+        const maxR = Math.max(24, rect.width * 0.38);
+        game.input.setAnalogVector(dx / maxR, dy / maxR, { snapCardinal: true, sourceId: 'crossdpad' });
+        crossDpadEl.classList.toggle('dir-left', game.input.analogX < -0.3);
+        crossDpadEl.classList.toggle('dir-right', game.input.analogX > 0.3);
+        crossDpadEl.classList.toggle('dir-up', game.input.analogY < -0.3);
+        crossDpadEl.classList.toggle('dir-down', game.input.analogY > 0.3);
+      };
+      crossDpadEl.addEventListener('pointerdown', (ev) => {
+        ev.preventDefault();
+        ensureTitleMusic();
+        dpadPointerId = ev.pointerId;
+        crossDpadEl.setPointerCapture?.(ev.pointerId);
+        updateCrossDpad(ev);
+      });
+      crossDpadEl.addEventListener('pointermove', (ev) => {
+        if (dpadPointerId !== ev.pointerId) return;
+        ev.preventDefault();
+        updateCrossDpad(ev);
+      });
+      const resetCrossDpad = (ev) => {
+        if (dpadPointerId !== null && ev.pointerId !== dpadPointerId) return;
+        dpadPointerId = null;
+        clearDpadHighlights();
+        game.input.setAnalogVector(0, 0, { snapCardinal: true, sourceId: 'crossdpad' });
+      };
+      crossDpadEl.addEventListener('pointerup', resetCrossDpad);
+      crossDpadEl.addEventListener('pointercancel', resetCrossDpad);
+      crossDpadEl.addEventListener('lostpointercapture', resetCrossDpad);
+    }
+
+    if (floatStickZone && floatStickRing && floatStickNub) {
+      let stickPointerId = null;
+      let originX = 0;
+      let originY = 0;
+      const maxR = 42;
+      const updateFloatStick = (ev) => {
+        const rect = floatStickZone.getBoundingClientRect();
+        const px = ev.clientX - rect.left;
+        const py = ev.clientY - rect.top;
+        let dx = px - originX;
+        let dy = py - originY;
         const dist = Math.hypot(dx, dy);
         if (dist > maxR) {
           dx = (dx / dist) * maxR;
           dy = (dy / dist) * maxR;
         }
-        vstickNub.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
-        game.input.setJoystickVector(dx / maxR, dy / maxR);
+        floatStickNub.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+        game.input.setAnalogVector(dx / maxR, dy / maxR, { snapCardinal: true, sourceId: 'floatstick' });
       };
-      vstickEl.addEventListener('pointerdown', (ev) => {
+      floatStickZone.addEventListener('pointerdown', (ev) => {
         ev.preventDefault();
         ensureTitleMusic();
         stickPointerId = ev.pointerId;
-        vstickEl.setPointerCapture?.(ev.pointerId);
-        updateStick(ev);
+        floatStickZone.setPointerCapture?.(ev.pointerId);
+        const rect = floatStickZone.getBoundingClientRect();
+        const pad = Math.min(46, rect.width * 0.35, rect.height * 0.35);
+        originX = Math.max(pad, Math.min(rect.width - pad, ev.clientX - rect.left));
+        originY = Math.max(pad, Math.min(rect.height - pad, ev.clientY - rect.top));
+        floatStickRing.style.left = `${originX.toFixed(1)}px`;
+        floatStickRing.style.top = `${originY.toFixed(1)}px`;
+        floatStickZone.classList.add('touching');
+        updateFloatStick(ev);
       });
-      vstickEl.addEventListener('pointermove', (ev) => {
+      floatStickZone.addEventListener('pointermove', (ev) => {
         if (stickPointerId !== ev.pointerId) return;
         ev.preventDefault();
-        updateStick(ev);
+        updateFloatStick(ev);
       });
-      const resetStick = (ev) => {
+      const resetFloatStick = (ev) => {
         if (stickPointerId !== null && ev.pointerId !== stickPointerId) return;
         stickPointerId = null;
-        vstickNub.style.transform = 'translate(0px, 0px)';
-        game.input.setJoystickVector(0, 0);
+        recenterFloatStick();
+        game.input.setAnalogVector(0, 0, { snapCardinal: true, sourceId: 'floatstick' });
       };
-      vstickEl.addEventListener('pointerup', resetStick);
-      vstickEl.addEventListener('pointercancel', resetStick);
+      floatStickZone.addEventListener('pointerup', resetFloatStick);
+      floatStickZone.addEventListener('pointercancel', resetFloatStick);
+      floatStickZone.addEventListener('lostpointercapture', resetFloatStick);
     }
 
     // Top HUD controls & Volume Slider (Desktop + Mobile sync)
@@ -1108,6 +1314,21 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         canvas.focus();
       });
     }
+
+    const btnDifficulty = document.getElementById('btnDifficulty');
+    const btnMobileDiff = document.getElementById('btnMobileDiff');
+    const btnDrawerDiff = document.getElementById('btnDrawerDiff');
+    const handleDiffCycle = (el) => {
+      game.cycleDifficulty();
+      el?.blur();
+      canvas.focus();
+    };
+    btnDifficulty?.addEventListener('click', () => handleDiffCycle(btnDifficulty));
+    btnMobileDiff?.addEventListener('click', () => handleDiffCycle(btnMobileDiff));
+    btnDrawerDiff?.addEventListener('click', () => {
+      game.cycleDifficulty();
+      btnDrawerDiff.blur();
+    });
 
     const bindJump = (id, fn) => {
       const el = document.getElementById(id);
@@ -1447,6 +1668,18 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         const el = document.getElementById(id);
         if (el) el.classList.toggle('active-mode', id === activeId);
       }
+
+      const diffId = game.battle.difficulty || 'hard';
+      const diffSpec = DIFFICULTIES[diffId] || DIFFICULTIES.hard;
+      const syncDiffEl = (el, shortMode = false) => {
+        if (!el) return;
+        el.classList.remove('diff-normal', 'diff-hard', 'diff-nightmare');
+        el.classList.add(`diff-${diffId}`);
+        el.textContent = shortMode ? `🔥 ${diffSpec.shortLabel}` : `🔥 Diff: ${diffSpec.label}`;
+      };
+      syncDiffEl(btnDifficulty, false);
+      syncDiffEl(btnMobileDiff, true);
+      syncDiffEl(btnDrawerDiff, false);
     };
 
     const btnFullscreen = document.getElementById('btnFullscreen');

@@ -1096,6 +1096,31 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
     ctx.drawImage(torsoSpr, torsoX, ty);
   }
 
+  // Phase-tinted crisp pixel rim lighting along hoodie silhouette & chest slash embers
+  if (phase >= 2 && !isSleeping) {
+    const rimClr = phase >= 5 ? '#e879f9' : phase >= 3 ? '#ff3c3c' : '#2ce8f5';
+    ctx.fillStyle = rimClr;
+    ctx.globalAlpha = 0.7 + Math.sin(time * 8) * 0.2;
+    // Left & right hoodie shoulder pixel rims
+    ctx.fillRect(torsoX + 2, ty + 6, 2, 16);
+    ctx.fillRect(torsoX + 68, ty + 6, 2, 16);
+    ctx.fillRect(torsoX + 4, ty + 2, 10, 2);
+    ctx.fillRect(torsoX + 58, ty + 2, 10, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  if ((phase >= 3 || pose === 'damaged') && !isSleeping) {
+    for (let e = 0; e < 5; e++) {
+      const cycle = (time * 2.6 + e * 0.23) % 1;
+      const ex = torsoX + 26 + e * 4 + Math.round(Math.sin(time * 9 + e) * 2);
+      const ey = ty + 28 - Math.round(cycle * 16);
+      ctx.globalAlpha = (1 - cycle) * 0.9;
+      ctx.fillStyle = cycle < 0.3 ? '#fff3a8' : (e % 2 === 0 ? '#ff3c3c' : '#ff8c24');
+      ctx.fillRect(Math.round(ex / 2) * 2, Math.round(ey / 2) * 2, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // Animated hoodie hem & collar flutter in high-intensity phases
   if (phase >= 2 && !isSleeping) {
     const flutter = Math.round(Math.sin(time * 9.5) * 2);
@@ -1145,6 +1170,17 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
     ctx.drawImage(headSpr, headX, hy);
   }
 
+  // Phase skull dome rim highlight
+  if (phase >= 2 && !isSleeping) {
+    const skullRim = phase >= 5 ? '#e879f9' : phase >= 3 ? '#ff4d4d' : '#2ce8f5';
+    ctx.fillStyle = skullRim;
+    ctx.globalAlpha = 0.65;
+    ctx.fillRect(headX + 12, hy, 32, 2);
+    ctx.fillRect(headX + 4, hy + 8, 2, 14);
+    ctx.fillRect(headX + 50, hy + 8, 2, 14);
+    ctx.globalAlpha = 1;
+  }
+
   // Phase 2/3 jagged skull crack overlay (when not already cracked/sleeping)
   if (phase >= 2 && expression !== 'cracked' && !isSleeping) {
     const crackSpr = drawPixelGrid(SANS_CRACK_OVERLAY, SANS_PAL, scale, 'sans-b-crack');
@@ -1153,19 +1189,36 @@ export function drawSansBattle(ctx, cx, baseY, options = {}) {
     }
   }
 
-  // Animated cyan/yellow pixel flame particles for blueEye
+  // Animated multi-layer cyan/gold pixel eye flame ribbon for blueEye
   if (expression === 'blueEye') {
     const isYellow = Math.floor(time * 16) % 2 === 0;
     const eyeMain = isYellow ? '#ffef3f' : '#2ce8f5';
+    const eyeOuter = isYellow ? '#ff8c1a' : '#0072e5';
     const eyeHot = '#ffffff';
-    for (let i = 0; i < 6; i++) {
-      const t = ((time * 4.5 + i * 0.21) % 1);
-      const px = Math.round((hx + 10 + t * 18 + Math.sin(time * 18 + i * 2) * 3) / 2) * 2;
-      const py = Math.round((hy + 22 - t * 24) / 2) * 2;
-      const sz = t < 0.35 ? 4 : 2;
-      ctx.globalAlpha = 1 - t * 0.85;
-      ctx.fillStyle = t < 0.2 ? eyeHot : eyeMain;
-      ctx.fillRect(px, py, sz, sz);
+
+    // Crisp pupil crosshair glints
+    ctx.fillStyle = eyeMain;
+    ctx.fillRect(hx + 6, hy + 18, 12, 2);
+    ctx.fillRect(hx + 11, hy + 13, 2, 12);
+    ctx.fillStyle = eyeHot;
+    ctx.fillRect(hx + 10, hy + 17, 4, 4);
+
+    // 12-segment swirling multi-layer pixel flame ribbon
+    for (let i = 0; i < 12; i++) {
+      const t = ((time * 5.2 + i * 0.085) % 1);
+      const sway = Math.sin(time * 20 + i * 0.75) * (2 + t * 5);
+      const px = Math.round((hx + 11 + t * 22 + sway) / 2) * 2;
+      const py = Math.round((hy + 20 - t * 32) / 2) * 2;
+
+      if (t < 0.75) {
+        ctx.globalAlpha = Math.max(0.15, (1 - t) * 0.7);
+        ctx.fillStyle = eyeOuter;
+        ctx.fillRect(px - 2, py, 6, 4);
+      }
+      ctx.globalAlpha = Math.max(0.2, 1 - t * 0.85);
+      ctx.fillStyle = t < 0.24 ? eyeHot : eyeMain;
+      const coreSz = t < 0.45 ? 4 : 2;
+      ctx.fillRect(px, py, coreSz, coreSz);
     }
     ctx.globalAlpha = 1;
   }
@@ -1521,26 +1574,36 @@ export function drawGasterBlaster(
   ctx.rotate(angle);
   if (scale !== 1) ctx.scale(scale, scale);
 
-  // Pixelated dashed warning sightline & orbiting charge sparks while charging
+  // Pixelated dashed warning sightline & converging charge reticle while charging
   if (!beamActive && charging > 0) {
     ctx.save();
-    ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(0.85, 0.22 + charging * 0.45)})`;
+    const hotLock = charging > 0.72;
+    ctx.fillStyle = hotLock
+      ? `rgba(255, 239, 63, ${Math.min(0.9, 0.3 + charging * 0.55)})`
+      : `rgba(255, 255, 255, ${Math.min(0.85, 0.22 + charging * 0.45)})`;
     for (let dy = 14; dy < beamLen; dy += 16) {
       ctx.fillRect(-1, dy, 2, 8);
     }
-    const now = typeof performance !== 'undefined' ? performance.now() * 0.012 : 0;
-    const radius = Math.max(4, (1 - Math.min(1, charging)) * 22 + 6);
-    for (let i = 0; i < 4; i++) {
-      const a = now + i * (Math.PI / 2);
+    // Corridor rail guide ticks
+    ctx.fillStyle = `rgba(44, 232, 245, ${Math.min(0.45, charging * 0.4)})`;
+    for (let dy = 20; dy < beamLen; dy += 40) {
+      ctx.fillRect(-14, dy, 2, 4);
+      ctx.fillRect(12, dy, 2, 4);
+    }
+
+    const now = typeof performance !== 'undefined' ? performance.now() * 0.014 : 0;
+    const radius = Math.max(4, (1 - Math.min(1, charging)) * 24 + 5);
+    for (let i = 0; i < 8; i++) {
+      const a = now + i * (Math.PI / 4);
       const sx = Math.round(Math.cos(a) * radius);
-      const sy = Math.round(14 + Math.sin(a) * radius * 0.55);
-      ctx.fillStyle = i % 2 === 0 ? '#2ce8f5' : '#ffffff';
-      ctx.fillRect(sx - 2, sy - 2, 4, 4);
+      const sy = Math.round(14 + Math.sin(a) * radius * 0.52);
+      ctx.fillStyle = i % 3 === 0 ? '#ffffff' : (hotLock ? '#ffef3f' : '#2ce8f5');
+      ctx.fillRect(sx - 2, sy - 2, i % 2 === 0 ? 4 : 2, i % 2 === 0 ? 4 : 2);
     }
     ctx.restore();
   }
 
-  // Pixelated beam core + outer dither glow + plasma crackle along local +Y
+  // Pixelated beam core + outer dither glow + plasma crackle + muzzle shockwaves along local +Y
   if (beamActive) {
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const pulseStep = Math.sin(now * 0.04) > 0 ? 2 : 0;
@@ -1553,7 +1616,7 @@ export function drawGasterBlaster(
     ctx.fillRect(-ditherHalf, 14, ditherHalf * 2, beamLen);
 
     const step = 4;
-    ctx.fillStyle = 'rgba(200, 248, 255, 0.55)';
+    ctx.fillStyle = 'rgba(200, 248, 255, 0.58)';
     for (let by = 14; by < Math.min(beamLen, 920); by += step) {
       const parity = ((by / step) + Math.floor(now * 0.03)) % 2;
       if (parity === 0) {
@@ -1570,18 +1633,27 @@ export function drawGasterBlaster(
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(-coreHalf, 10, coreHalf * 2, beamLen);
 
-    // High-voltage plasma zigzags inside the beam
-    ctx.fillStyle = '#e0ffff';
-    for (let by = 24; by < Math.min(beamLen, 720); by += 28) {
+    // High-voltage plasma chevrons & zigzags inside the beam
+    ctx.fillStyle = '#d8ffff';
+    for (let by = 24; by < Math.min(beamLen, 720); by += 26) {
       const zig = Math.sin(now * 0.05 + by * 0.1) > 0 ? 1 : -1;
       ctx.fillRect(zig * (coreHalf - 3), by, 4, 8);
+      ctx.fillStyle = '#2ce8f5';
+      ctx.fillRect(-4, by + 6, 8, 2);
+      ctx.fillStyle = '#d8ffff';
     }
 
-    // Stepped pixel muzzle flare at mouth origin
+    // Stepped pixel muzzle shockwave rings & wing flare at mouth origin
+    const waveOffset = Math.floor((now * 0.09) % 18);
+    const waveHalf = coreHalf + 8 + Math.floor(waveOffset * 0.45);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(-coreHalf - 6, 12, (coreHalf + 6) * 2, 10);
+    ctx.fillRect(-coreHalf - 8, 12, (coreHalf + 8) * 2, 10);
     ctx.fillStyle = '#a8f8ff';
-    ctx.fillRect(-coreHalf - 10, 14, (coreHalf + 10) * 2, 6);
+    ctx.fillRect(-coreHalf - 14, 14, (coreHalf + 14) * 2, 6);
+    ctx.fillStyle = '#2ce8f5';
+    ctx.fillRect(-waveHalf, 20 + waveOffset, 4, 4);
+    ctx.fillRect(waveHalf - 4, 20 + waveOffset, 4, 4);
+    ctx.fillRect(-waveHalf + 6, 22 + waveOffset, (waveHalf - 6) * 2, 2);
   }
 
   // Select 1 of the 3 distinct skull matrices
@@ -1677,12 +1749,16 @@ export function drawBone(ctx, x, y, w, h, colorType = 'white', orientation = 've
     ctx.fillStyle = pal.fill;
     ctx.fillRect(rx, ry + 1, rw, rh - 2);
 
-    // Inner shade on right edge & highlight on left edge
+    // Inner shade on right edge, highlight on left edge, and neon inner core spine
     if (rw >= 6) {
       ctx.fillStyle = pal.hi;
       ctx.fillRect(rx + 1, ry + 2, 2, rh - 4);
       ctx.fillStyle = pal.sh;
       ctx.fillRect(rx + rw - 2, ry + 2, 2, rh - 4);
+      ctx.fillStyle = colorType === 'white' ? '#f8fbff' : '#ffffff';
+      ctx.globalAlpha = colorType === 'white' ? 0.45 : 0.72;
+      ctx.fillRect(midX - 1, ry + capH, 2, Math.max(2, rh - capH * 2));
+      ctx.globalAlpha = 1;
     }
 
     // Top pixel-art dual knuckle condyles
@@ -1690,6 +1766,10 @@ export function drawBone(ctx, x, y, w, h, colorType = 'white', orientation = 've
     ctx.fillRect(rx - 2, ry + 2, rw + 4, capH - 2);
     ctx.fillRect(rx - 1, ry, Math.max(2, midX - rx), 2);
     ctx.fillRect(midX + 1, ry, Math.max(2, rx + rw + 1 - (midX + 1)), 2);
+    // Condyle crown specular pips
+    ctx.fillStyle = pal.hi;
+    ctx.fillRect(rx, ry + 2, 2, 2);
+    ctx.fillRect(rx + rw - 2, ry + 2, 2, 2);
     // Top center cleft notch
     ctx.fillStyle = pal.out;
     ctx.fillRect(midX - 1, ry, 2, 2);
@@ -1700,6 +1780,8 @@ export function drawBone(ctx, x, y, w, h, colorType = 'white', orientation = 've
     ctx.fillRect(rx - 2, botY, rw + 4, capH - 2);
     ctx.fillRect(rx - 1, ry + rh - 2, Math.max(2, midX - rx), 2);
     ctx.fillRect(midX + 1, ry + rh - 2, Math.max(2, rx + rw + 1 - (midX + 1)), 2);
+    ctx.fillStyle = pal.hi;
+    ctx.fillRect(rx, ry + rh - 4, 2, 2);
     // Bottom center cleft notch
     ctx.fillStyle = pal.out;
     ctx.fillRect(midX - 1, ry + rh - 2, 2, 2);
@@ -1736,6 +1818,10 @@ export function drawBone(ctx, x, y, w, h, colorType = 'white', orientation = 've
       ctx.fillRect(rx + 2, ry + 1, rw - 4, 2);
       ctx.fillStyle = pal.sh;
       ctx.fillRect(rx + 2, ry + rh - 2, rw - 4, 2);
+      ctx.fillStyle = colorType === 'white' ? '#f8fbff' : '#ffffff';
+      ctx.globalAlpha = colorType === 'white' ? 0.45 : 0.72;
+      ctx.fillRect(rx + capW, midY - 1, Math.max(2, rw - capW * 2), 2);
+      ctx.globalAlpha = 1;
     }
 
     // Left pixel-art dual knuckle condyles
@@ -1743,6 +1829,8 @@ export function drawBone(ctx, x, y, w, h, colorType = 'white', orientation = 've
     ctx.fillRect(rx + 2, ry - 2, capW - 2, rh + 4);
     ctx.fillRect(rx, ry - 1, 2, Math.max(2, midY - ry));
     ctx.fillRect(rx, midY + 1, 2, Math.max(2, ry + rh + 1 - (midY + 1)));
+    ctx.fillStyle = pal.hi;
+    ctx.fillRect(rx + 2, ry, 2, 2);
     ctx.fillStyle = pal.out;
     ctx.fillRect(rx, midY - 1, 2, 2);
 
@@ -1752,6 +1840,8 @@ export function drawBone(ctx, x, y, w, h, colorType = 'white', orientation = 've
     ctx.fillRect(rightX, ry - 2, capW - 2, rh + 4);
     ctx.fillRect(rx + rw - 2, ry - 1, 2, Math.max(2, midY - ry));
     ctx.fillRect(rx + rw - 2, midY + 1, 2, Math.max(2, ry + rh + 1 - (midY + 1)));
+    ctx.fillStyle = pal.hi;
+    ctx.fillRect(rx + rw - 4, ry, 2, 2);
     ctx.fillStyle = pal.out;
     ctx.fillRect(rx + rw - 2, midY - 1, 2, 2);
 
@@ -1812,6 +1902,23 @@ export function drawBoneWheel(ctx, x, y, radius, angle, spokes = 6, colorType = 
     ctx.restore();
   }
 
+  const hubSize = radius < 30 ? 20 : 28;
+  const spikeOffset = Math.round(hubSize * 0.5);
+
+  // Inter-spoke spiked iron-bone hub crown
+  for (let i = 0; i < spokes; i++) {
+    const a = angle + ((i + 0.5) * Math.PI * 2) / spokes;
+    ctx.save();
+    ctx.rotate(a);
+    ctx.fillStyle = pal.out;
+    ctx.fillRect(-3, spikeOffset - 2, 6, 8);
+    ctx.fillStyle = pal.sh;
+    ctx.fillRect(-2, spikeOffset - 1, 4, 6);
+    ctx.fillStyle = pal.hi;
+    ctx.fillRect(-1, spikeOffset + 3, 2, 2);
+    ctx.restore();
+  }
+
   const hubSpr = drawPixelGrid(
     BONE_WHEEL_HUB_GRID,
     { K: pal.out, W: pal.fill, L: pal.sh },
@@ -1819,9 +1926,14 @@ export function drawBoneWheel(ctx, x, y, radius, angle, spokes = 6, colorType = 
     `bone-wheel-hub-${colorType}`
   );
   if (hubSpr) {
-    const hubSize = radius < 30 ? 20 : 28;
     ctx.drawImage(hubSpr, -Math.round(hubSize / 2), -Math.round(hubSize / 2), hubSize, hubSize);
   }
+
+  // Center jewel glint inside the spinning skull hub
+  ctx.fillStyle = colorType === 'white' ? '#2ce8f5' : pal.hi;
+  ctx.fillRect(-2, -2, 4, 4);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-1, -1, 2, 2);
 
   ctx.restore();
 }
@@ -2378,19 +2490,42 @@ export function drawBattleButton(ctx, x, y, label, selected = false, soulMode = 
   const bx = Math.round(x);
   const by = Math.round(y);
   const color = selected ? '#ffef3f' : '#ff7d20';
+  const hiColor = selected ? '#fff9c4' : '#ffb86c';
+  const shColor = selected ? '#a37b00' : '#8c3708';
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(bx, by, w, h);
+  // Recessed interior panel & subtle inner shade band
+  ctx.fillStyle = selected ? '#161102' : '#050408';
+  ctx.fillRect(bx + 2, by + 2, w - 4, h - 4);
+  ctx.fillStyle = selected ? 'rgba(255, 239, 63, 0.14)' : 'rgba(255, 125, 32, 0.08)';
+  ctx.fillRect(bx + 4, by + 4, w - 8, 4);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.fillRect(bx + 4, by + h - 6, w - 8, 2);
 
-  // Crisp 2px pixel-edge border
+  // Beveled 2px pixel outer border (chamfered corner notched style)
   ctx.fillStyle = color;
-  ctx.fillRect(bx, by, w, 2);
-  ctx.fillRect(bx, by + h - 2, w, 2);
-  ctx.fillRect(bx, by, 2, h);
-  ctx.fillRect(bx + w - 2, by, 2, h);
+  ctx.fillRect(bx + 2, by, w - 4, 2);
+  ctx.fillRect(bx + 2, by + h - 2, w - 4, 2);
+  ctx.fillRect(bx, by + 2, 2, h - 4);
+  ctx.fillRect(bx + w - 2, by + 2, 2, h - 4);
+
+  // Inner top-left bevel highlight & bottom-right shadow
+  ctx.fillStyle = hiColor;
+  ctx.fillRect(bx + 4, by + 2, w - 8, 1);
+  ctx.fillRect(bx + 2, by + 4, 1, h - 8);
+  ctx.fillStyle = shColor;
+  ctx.fillRect(bx + 4, by + h - 3, w - 8, 1);
+  ctx.fillRect(bx + w - 3, by + 4, 1, h - 8);
+
+  if (selected) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(bx + 2, by + 2, 2, 2);
+    ctx.fillRect(bx + w - 4, by + 2, 2, 2);
+    ctx.fillRect(bx + 2, by + h - 4, 2, 2);
+    ctx.fillRect(bx + w - 4, by + h - 4, 2, 2);
+  }
 
   const ix = bx + 16;
   const iy = by + Math.floor(h / 2);
@@ -2804,6 +2939,75 @@ export function drawSoulShrine(ctx, x, y, time = 0) {
   ctx.restore();
 }
 
+// Dedicated Phase 5 Gaster Unbound pixel matrices & void palette
+const GASTER_UNBOUND_PAL = {
+  K: '#070610',
+  V: '#1b1136',
+  P: '#4c1d95',
+  R: '#e879f9',
+  C: '#2ce8f5',
+  W: '#f1f5f9',
+  S: '#94a3b8'
+};
+
+// 24x22 Asymmetric Cracked Void Skull (at 3x = 72x66)
+const GASTER_UNBOUND_SKULL_GRID = [
+  '........KKKKKKKK........',
+  '......KKWWWWWWWWKK......',
+  '....KKWWWWWWWWWWWWKK....',
+  '...KWWCWWWWWWWWWWCWWK...',
+  '..KWWWCWWWSWWWWWWWWWWK..',
+  '..KWWWWWWSSKWWKWWWWWWK..',
+  '.KWWWWWWWWKWWWKWWWWWWWK.',
+  '.KWWKWWKWWKWWKWWKWWKWWK.',
+  '.KWWKKKKKKWWWWKKKKKKWWK.',
+  '.KWWKCCKKKWWWWKKKRRKWWK.',
+  '.KWWKCKKKWWKKWWKKRKKWWK.',
+  '..KWWKKKWWWWWWWWKKKWWK..',
+  '..KWWWSWWWKWWKWWWSWWWK..',
+  '...KWWKWWWKWWKWWWKWWK...',
+  '...KWWWWSSWWWWSSWWWWK...',
+  '....KWWWKWWKKWWKWWWK....',
+  '....KWWWKWWKKWWKWWWK....',
+  '.....KWWWWWWWWWWWWK.....',
+  '......KKWKWKKWKWKK......',
+  '........KKKKKKKK........',
+  '.........KKKKKK.........',
+  '........................'
+];
+
+// 30x28 Flowing Void Cloak, Pauldrons & Void-Core Sternum (at 3x = 90x84)
+const GASTER_UNBOUND_CLOAK_GRID = [
+  '.........KKKKKKKKKKKK.........',
+  '.......KKPPPPVVVVPPPPKK.......',
+  '.....KKPPVVVVKKKKVVVVPPKK.....',
+  '....KPPVVKKKRCCCCRKKKVVPPK....',
+  '...KPVVKKKRRCCCCCCRRRKKVVPK...',
+  '..KPVVKKRRRRCCCCCCRRRRKKVVPK..',
+  '..KPVKKKRRRRWCCCCWRRRRKKKVPK..',
+  '.KPVVKKKRRRRWWWWWRRRRRKKKVVPK.',
+  '.KPVKKKVKKKRRRRRRRRKKKVKKKVPK.',
+  '.KPVKKVVKKKPPCCCCPPKKKVVKKVPK.',
+  'KPVVKKVVKPPPPCCCCPPPPKVVKVVPPK',
+  'KPVKKVVVKPPVCCCCCCVPPKVVVKKVPK',
+  'KPKKKVVVKPPVCWWWWCVPPKVVVKKKPK',
+  '.K..KVVVKPPVVCCCCVVPPKVVVK..K.',
+  '....KVVVKPPVVKKKKVVPPKVVVK....',
+  '....KVVVKPPVVVKKVVVPPKVVVK....',
+  '...KVVVKKPPVVVVVVVVPPKKVVVK...',
+  '...KVVKKKPPVRVVVVRVPPKKKVVK...',
+  '..KVVKKKKPPVVRRRRVVPPKKKKVVK..',
+  '..KVK..KKPPVVVVVVVVPPKK..KVK..',
+  '..KK...KPPVVKVVVVKVPPK...KK...',
+  '.......KPVKK.KVVVK.KVPK.......',
+  '......KKPKK..KVVVK..KKPKK.....',
+  '......KK.....KVVK......KK.....',
+  '.............KVK..............',
+  '..............K...............',
+  '..............................',
+  '..............................'
+];
+
 export function drawGasterUnbound(ctx, cx, baseY, options = {}) {
   const {
     time = 0,
@@ -2821,13 +3025,13 @@ export function drawGasterUnbound(ctx, cx, baseY, options = {}) {
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
-  // 1. Rotating arcane rune ring behind Gaster Unbound
-  const runeRadius = 56 + beatPulse * 8;
-  for (let i = 0; i < 8; i++) {
-    const ang = time * 0.9 + (i * Math.PI) / 4;
+  // 1. Rotating arcane rune ring & inner void pulse halo behind Gaster Unbound
+  const runeRadius = 60 + beatPulse * 10;
+  for (let i = 0; i < 10; i++) {
+    const ang = time * 0.95 + (i * Math.PI) / 5;
     const rx = Math.round(x + Math.cos(ang) * runeRadius);
-    const ry = Math.round(y - 68 + Math.sin(ang) * (runeRadius * 0.42));
-    ctx.fillStyle = i % 2 === 0 ? '#d946ef' : '#2ce8f5';
+    const ry = Math.round(y - 72 + Math.sin(ang) * (runeRadius * 0.44));
+    ctx.fillStyle = i % 2 === 0 ? '#e879f9' : '#2ce8f5';
     ctx.globalAlpha = 0.55 + beatPulse * 0.35;
     ctx.fillRect(rx - 3, ry - 3, 6, 6);
     ctx.fillStyle = '#ffffff';
@@ -2839,29 +3043,35 @@ export function drawGasterUnbound(ctx, cx, baseY, options = {}) {
   for (let i = -3; i <= 3; i++) {
     const sway = Math.round(Math.sin(time * 5.2 + i * 1.1) * 6);
     ctx.fillStyle = Math.abs(i) % 2 === 0 ? '#110c21' : '#28194a';
-    ctx.fillRect(x + i * 10 - 4 + sway, y - 36, 8, 34 + (i % 2 === 0 ? 4 : 0));
-    ctx.fillStyle = '#a855f7';
-    ctx.fillRect(x + i * 10 - 2 + sway, y - 6, 4, 4);
+    ctx.fillRect(x + i * 11 - 4 + sway, y - 34, 8, 34 + (i % 2 === 0 ? 6 : 0));
+    ctx.fillStyle = Math.abs(i) % 2 === 0 ? '#a855f7' : '#2ce8f5';
+    ctx.fillRect(x + i * 11 - 2 + sway, y - 6, 4, 4);
   }
 
-  // 3. Towering Cloak & Asymmetric Cracked Skull (scaled slightly larger than Phase 3/4 overlay)
-  const bodySpr = drawPixelGrid(GASTER_CRACKED_BODY, GASTER_PAL, 3, 'gaster-body-v1');
-  if (bodySpr) {
-    ctx.drawImage(bodySpr, x - 48, y - 144);
+  // 3. Dedicated Void Cloak & Asymmetric Cracked Skull matrices
+  const cloakSpr = drawPixelGrid(GASTER_UNBOUND_CLOAK_GRID, GASTER_UNBOUND_PAL, 3, 'gaster-u-cloak');
+  const skullSpr = drawPixelGrid(GASTER_UNBOUND_SKULL_GRID, GASTER_UNBOUND_PAL, 3, 'gaster-u-skull');
+  if (cloakSpr) {
+    ctx.drawImage(cloakSpr, x - 45, y - 92);
+  }
+  const headHover = Math.round(Math.cos(time * 3.1) * 2);
+  if (skullSpr) {
+    ctx.drawImage(skullSpr, x - 36, y - 146 + headHover);
   }
 
   // Intense Phase 5 glowing void eyes & crack lightning
   const flicker = Math.sin(time * 22) > 0;
   ctx.fillStyle = flicker ? '#2ce8f5' : '#e879f9';
-  ctx.fillRect(x - 14, y - 118, 4, 6);
-  ctx.fillRect(x + 10, y - 116, 4, 4);
+  ctx.fillRect(x - 16, y - 122 + headHover, 6, 6);
+  ctx.fillRect(x + 10, y - 120 + headHover, 6, 4);
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(x - 13, y - 116, 2, 2);
-  ctx.fillRect(x + 11, y - 115, 2, 2);
+  ctx.fillRect(x - 14, y - 120 + headHover, 2, 2);
+  ctx.fillRect(x + 12, y - 119 + headHover, 2, 2);
 
-  // 4. Six floating skeletal Gaster hands with glowing palm holes
+  // 4. Six floating skeletal Gaster hands with crackling energy hand tethers
   const lSpr = drawPixelGrid(GASTER_HAND_LEFT, GASTER_PAL, 2, 'gaster-hand-l');
   const rSpr = drawPixelGrid(GASTER_HAND_RIGHT, GASTER_PAL, 2, 'gaster-hand-r');
+  const coreY = y - 66;
   for (let row = 0; row < 3; row++) {
     const fanAngle = (row - 1) * 0.45 + Math.sin(time * 2.5 + row) * 0.15;
     const dist = 78 + row * 18 + beatPulse * 6;
@@ -2873,7 +3083,17 @@ export function drawGasterUnbound(ctx, cx, baseY, options = {}) {
       [lSpr, lx, row % 2 === 0 ? '#e879f9' : '#2ce8f5'],
       [rSpr, rx, row % 2 === 0 ? '#2ce8f5' : '#e879f9']
     ]) {
+      // Stepped pixel lightning tether from core to floating palm
       ctx.fillStyle = clr;
+      ctx.globalAlpha = 0.45 + beatPulse * 0.3;
+      const steps = 6;
+      for (let s = 1; s < steps; s++) {
+        const t = s / steps;
+        const jx = Math.round((x + (hx - x) * t + Math.sin(time * 18 + s + row) * 3) / 2) * 2;
+        const jy = Math.round((coreY + (hy - coreY) * t + Math.cos(time * 16 + s) * 2) / 2) * 2;
+        ctx.fillRect(jx, jy, 2, 2);
+      }
+
       ctx.globalAlpha = 0.65 + beatPulse * 0.3;
       ctx.fillRect(hx - 4, hy - 4, 8, 8);
       ctx.globalAlpha = 1;
@@ -2882,13 +3102,14 @@ export function drawGasterUnbound(ctx, cx, baseY, options = {}) {
   }
 
   // White flash silhouette on hit
-  if (flashAlpha > 0 && bodySpr) {
-    const whitePal = makeWhiteSilhouettePalette(GASTER_PAL);
-    const wBody = drawPixelGrid(GASTER_CRACKED_BODY, whitePal, 3, 'gaster-w-body');
-    if (wBody) {
-      ctx.globalAlpha = Math.min(1, flashAlpha);
-      ctx.drawImage(wBody, x - 48, y - 144);
-    }
+  if (flashAlpha > 0) {
+    const whitePal = makeWhiteSilhouettePalette(GASTER_UNBOUND_PAL);
+    const wCloak = drawPixelGrid(GASTER_UNBOUND_CLOAK_GRID, whitePal, 3, 'gaster-u-wcloak');
+    const wSkull = drawPixelGrid(GASTER_UNBOUND_SKULL_GRID, whitePal, 3, 'gaster-u-wskull');
+    ctx.globalAlpha = Math.min(1, flashAlpha);
+    if (wCloak) ctx.drawImage(wCloak, x - 45, y - 92);
+    if (wSkull) ctx.drawImage(wSkull, x - 36, y - 146 + headHover);
+    ctx.globalAlpha = 1;
   }
 
   ctx.restore();
@@ -2911,75 +3132,135 @@ export function drawBattleBackdrop(ctx, options = {}) {
   ctx.fillRect(0, 0, width, height);
 
   if (phase === 1) {
-    // Twilight Judgment Hall stained-glass warm gold shafts
-    ctx.fillStyle = 'rgba(255, 220, 110, 0.045)';
-    for (let i = 0; i < 4; i++) {
-      const x0 = 60 + i * 165;
+    // Twilight Judgment Hall: arched stained-glass windows + warm sunbeams + golden dust
+    const windowXs = [78, 224, 416, 562];
+    for (let i = 0; i < windowXs.length; i++) {
+      const wx = windowXs[i] - 26;
+      // Arched stone frame
+      ctx.fillStyle = 'rgba(255, 210, 105, 0.08)';
+      ctx.fillRect(wx, 18, 52, 130);
+      ctx.fillRect(wx + 8, 6, 36, 12);
+      // Stained glass diamond lattice mullions
+      ctx.fillStyle = 'rgba(255, 190, 80, 0.14)';
+      ctx.fillRect(wx + 25, 8, 2, 140);
+      ctx.fillRect(wx, 54, 52, 2);
+      ctx.fillRect(wx, 96, 52, 2);
+      // Warm diagonal light shaft
+      ctx.fillStyle = 'rgba(255, 220, 110, 0.048)';
       ctx.beginPath();
-      ctx.moveTo(x0, 0);
-      ctx.lineTo(x0 + 54, 0);
-      ctx.lineTo(x0 - 20, 260);
-      ctx.lineTo(x0 - 74, 260);
+      ctx.moveTo(wx + 2, 18);
+      ctx.lineTo(wx + 50, 18);
+      ctx.lineTo(wx - 22, 250);
+      ctx.lineTo(wx - 70, 250);
       ctx.closePath();
       ctx.fill();
     }
+    // Floating twilight dust motes
+    for (let i = 0; i < 14; i++) {
+      const dx = Math.round(((i * 97 + time * 8 + Math.sin(time + i) * 14) % width) / 2) * 2;
+      const dy = Math.round((40 + ((i * 53 + Math.sin(time * 0.9 + i) * 16) % 180)) / 2) * 2;
+      ctx.fillStyle = 'rgba(255, 232, 150, 0.35)';
+      ctx.fillRect(dx, dy, 2, 2);
+    }
   } else if (phase === 2) {
-    // Crimson Velocity storm + rising ember sparks
+    // Crimson Velocity storm + diagonal wind streaks + dual-tone rising embers
     const grad = ctx.createLinearGradient(0, 0, 0, 260);
-    grad.addColorStop(0, `rgba(180, 30, 30, ${0.12 + beatPulse * 0.08})`);
+    grad.addColorStop(0, `rgba(180, 30, 30, ${0.14 + beatPulse * 0.1})`);
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, 260);
 
-    for (let i = 0; i < 18; i++) {
-      const cy = ((time * (28 + (i % 4) * 11) + i * 37) % 240);
-      const px = Math.round(((i * 97 + Math.sin(time * 2 + i) * 18) % width) / 2) * 2;
+    for (let i = 0; i < 8; i++) {
+      const sy = Math.round((24 + i * 28) / 2) * 2;
+      const sx = ((time * (180 + (i % 3) * 45) + i * 90) % (width + 120)) - 120;
+      ctx.fillStyle = 'rgba(255, 95, 70, 0.18)';
+      ctx.fillRect(Math.round(sx), sy, 76, 2);
+    }
+
+    for (let i = 0; i < 28; i++) {
+      const cy = ((time * (34 + (i % 4) * 12) + i * 37) % 240);
+      const px = Math.round(((i * 97 + Math.sin(time * 2.4 + i) * 22) % width) / 2) * 2;
       const py = Math.round((240 - cy) / 2) * 2;
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(251, 146, 60, 0.35)' : 'rgba(248, 113, 113, 0.28)';
+      ctx.fillStyle = i % 3 === 0 ? 'rgba(255, 230, 120, 0.48)' : 'rgba(248, 113, 113, 0.35)';
       ctx.fillRect(px, py, 2, 4);
     }
   } else if (phase === 3 || phase === 4) {
-    // Void Fracture glowing sky fissures & chromatic pulses
+    // Void Fracture branching sky fissures & floating horizon crystal shards
     const grad = ctx.createLinearGradient(0, 0, 0, 260);
-    grad.addColorStop(0, phase >= 4 ? `rgba(126, 34, 206, ${0.18 + beatPulse * 0.14})` : `rgba(34, 211, 238, ${0.14 + beatPulse * 0.1})`);
+    grad.addColorStop(0, phase >= 4 ? `rgba(126, 34, 206, ${0.2 + beatPulse * 0.16})` : `rgba(34, 211, 238, ${0.15 + beatPulse * 0.11})`);
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, 260);
 
-    // Jagged Void Sky Cracks
-    ctx.fillStyle = phase >= 4 ? `rgba(192, 132, 252, ${0.22 + beatPulse * 0.2})` : 'rgba(44, 232, 245, 0.22)';
+    // Branching Jagged Void Sky Fissures
+    const fissureClr = phase >= 4 ? `rgba(192, 132, 252, ${0.26 + beatPulse * 0.22})` : 'rgba(44, 232, 245, 0.26)';
     for (let k = 0; k < 5; k++) {
-      const bx = 70 + k * 125;
-      for (let step = 0; step < 6; step++) {
-        ctx.fillRect(bx + ((step % 2) * 6 - 3), step * 16 + 14, 2, 14);
+      const bx = 68 + k * 124;
+      ctx.fillStyle = fissureClr;
+      for (let step = 0; step < 7; step++) {
+        const fx = bx + ((step % 2) * 8 - 4);
+        const fy = step * 16 + 10;
+        ctx.fillRect(fx, fy, 2, 14);
+        if (step % 2 === 1) {
+          ctx.fillRect(fx + (k % 2 === 0 ? 4 : -6), fy + 6, 6, 2);
+        }
       }
     }
+    // Floating fractured void crystal shards along the lower horizon
+    for (let s = 0; s < 10; s++) {
+      const sx = 32 + s * 62;
+      const sy = Math.round((214 + Math.sin(time * 2.2 + s) * 8) / 2) * 2;
+      ctx.fillStyle = s % 2 === 0 ? 'rgba(44, 232, 245, 0.3)' : 'rgba(217, 70, 239, 0.3)';
+      ctx.fillRect(sx - 2, sy, 4, 10);
+      ctx.fillRect(sx - 4, sy + 2, 8, 4);
+    }
   } else {
-    // Phase 5: DARKER YET DARKER — Scrolling parallax monoliths & Void cathedral arches
+    // Phase 5: DARKER YET DARKER — Scrolling parallax monoliths & perspective Void floor grid
     const bgGlow = ctx.createRadialGradient(320, 120, 18, 320, 130, 340);
-    bgGlow.addColorStop(0, `rgba(217, 70, 239, ${0.22 + beatPulse * 0.18})`);
-    bgGlow.addColorStop(0.55, `rgba(44, 232, 245, ${0.08 + beatPulse * 0.06})`);
+    bgGlow.addColorStop(0, `rgba(217, 70, 239, ${0.24 + beatPulse * 0.2})`);
+    bgGlow.addColorStop(0.55, `rgba(44, 232, 245, ${0.1 + beatPulse * 0.08})`);
     bgGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = bgGlow;
     ctx.fillRect(0, 0, width, height);
 
-    const scroll = (time * 32) % 160;
+    const scroll = (time * 34) % 160;
     for (let col = -1; col < 6; col++) {
       const mx = Math.round(col * 160 - scroll);
-      ctx.fillStyle = 'rgba(24, 14, 48, 0.65)';
-      ctx.fillRect(mx, 0, 34, 240);
-      ctx.fillStyle = `rgba(217, 70, 239, ${0.25 + beatPulse * 0.25})`;
-      ctx.fillRect(mx, 0, 2, 240);
-      ctx.fillRect(mx + 32, 0, 2, 240);
+      ctx.fillStyle = 'rgba(24, 14, 48, 0.72)';
+      ctx.fillRect(mx, 0, 34, 210);
+      ctx.fillStyle = `rgba(217, 70, 239, ${0.28 + beatPulse * 0.25})`;
+      ctx.fillRect(mx, 0, 2, 210);
+      ctx.fillRect(mx + 32, 0, 2, 210);
+      ctx.fillStyle = 'rgba(44, 232, 245, 0.35)';
+      ctx.fillRect(mx + 8, 28, 18, 4);
+      ctx.fillRect(mx + 12, 54, 10, 4);
+    }
+
+    // Parallax Perspective Void Floor Grid (y = 186..244)
+    ctx.fillStyle = `rgba(44, 232, 245, ${0.18 + beatPulse * 0.14})`;
+    const gridH = 58;
+    for (let r = 0; r < 6; r++) {
+      const z = ((r / 6 + (time * 0.55) % 1) % 1);
+      const gy = Math.round(186 + z * z * gridH);
+      ctx.fillRect(0, gy, width, 1);
+    }
+    for (let c = -6; c <= 6; c++) {
+      const topX = 320 + c * 28;
+      const botX = 320 + c * 74;
+      const steps = 8;
+      for (let s = 0; s < steps; s++) {
+        const t = s / steps;
+        ctx.fillRect(Math.round(topX + (botX - topX) * t), Math.round(186 + t * gridH), 2, 4);
+      }
     }
 
     // Subtle rising void rune sparkles
-    for (let i = 0; i < 20; i++) {
-      const cy = ((time * 36 + i * 41) % 240);
+    for (let i = 0; i < 24; i++) {
+      const cy = ((time * 38 + i * 41) % 240);
       const px = Math.round(((i * 71 + Math.sin(time * 2.4 + i) * 14) % width) / 2) * 2;
       const py = Math.round((240 - cy) / 2) * 2;
       ctx.fillStyle = i % 2 === 0 ? '#e879f9' : '#2ce8f5';
-      ctx.globalAlpha = 0.45 * (1 - cy / 240);
+      ctx.globalAlpha = 0.5 * (1 - cy / 240);
       ctx.fillRect(px, py, 2, 2);
     }
   }

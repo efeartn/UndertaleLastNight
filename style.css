@@ -168,6 +168,25 @@ body {
   box-shadow: 0 0 8px rgba(255, 239, 63, 0.25);
 }
 
+.hud-btn.diff-normal {
+  border-color: #22c55e;
+  color: #86efac;
+  background: #0d2015;
+}
+
+.hud-btn.diff-hard {
+  border-color: #ea580c;
+  color: #fed7aa;
+  background: #24130b;
+}
+
+.hud-btn.diff-nightmare {
+  border-color: #c026d3;
+  color: #f5d0fe;
+  background: #220d29;
+  box-shadow: 0 0 8px rgba(232, 121, 249, 0.25);
+}
+
 #btnJumpP4 {
   border-color: #7e22ce;
   color: #e9d5ff;
@@ -391,135 +410,344 @@ body {
 
 .touch-controls {
   display: none;
-  width: min(100%, 520px);
+  width: min(100%, 540px);
   justify-content: space-between;
   align-items: center;
-  padding: 6px 12px;
-  background: rgba(14, 14, 22, 0.88);
-  border: 2px solid var(--border);
+  padding: 10px 14px;
+  background: linear-gradient(180deg, #1b1b29 0%, #11111b 100%);
+  border: 2px solid #3c3c56;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.08), 0 12px 26px rgba(0, 0, 0, 0.65);
 }
 
-.dpad {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.dpad-mid {
-  display: flex;
-  gap: 4px;
-}
-
-.pad-btn,
-.act-btn {
+.act-btn,
+.gb-pill-btn {
   background: #1b1b29;
   color: #fff;
   border: 2px solid #5c5c7a;
   font-family: 'Press Start 2P', monospace;
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
+  user-select: none;
 }
 
-.pad-btn {
-  width: 44px;
-  height: 44px;
-  font-size: 14px;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 10px;
-}
-
-.act-btn {
-  width: 54px;
-  height: 54px;
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  gap: 3px;
-}
-
-.act-btn small {
-  font-family: 'VT323', monospace;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.act-z {
-  border-color: #facc15;
-}
-
-.act-x {
-  border-color: #f87171;
-}
-
-.act-c {
-  border-color: #38bdf8;
-}
-
-.pad-btn:active,
-.act-btn:active,
-.pad-btn.active-touch,
-.act-btn.active-touch {
-  background: #353554;
-  transform: scale(0.96);
-}
-
-/* Handheld Virtual Joystick & Deck Layout */
 .deck-left {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+}
+
+.deck-center {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .deck-right {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
   gap: 10px;
+}
+
+.ab-cluster {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.act-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  gap: 2px;
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.14), 0 4px 0 #090910;
+}
+
+.act-btn small {
+  font-family: 'VT323', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.act-z {
+  background: radial-gradient(circle at 32% 28%, #521b38 0%, #2b0f1e 72%);
+  border-color: #facc15;
+  color: #fef08a;
+}
+
+.act-x {
+  background: radial-gradient(circle at 32% 28%, #4b1d28 0%, #280e14 72%);
+  border-color: #f87171;
+  color: #fecaca;
+}
+
+.act-c {
+  width: 96px;
+  height: 32px;
+  border-radius: 16px;
+  border-color: #38bdf8;
+  font-size: 10px;
+  flex-direction: row;
+  gap: 6px;
+}
+
+.act-btn:active,
+.act-btn.active-touch,
+.gb-pill-btn:active,
+.gb-pill-btn.active-touch {
+  filter: brightness(1.32);
+  transform: translateY(2px) scale(0.96);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 0 #050508;
 }
 
 .pad-swap-btn {
   background: #141422;
   color: var(--cyan);
   border: 1px solid #38bdf8;
+  border-radius: 4px;
   padding: 2px 8px;
   font-family: 'VT323', monospace;
   font-size: 14px;
   cursor: pointer;
   touch-action: manipulation;
+  white-space: nowrap;
 }
 
-.vstick-base {
+/* Sculpted Nintendo-style Precision Slide-Touch Cross D-Pad */
+.cross-dpad {
   position: relative;
-  width: 112px;
-  height: 112px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(32, 32, 54, 0.92) 0%, rgba(12, 12, 22, 0.96) 72%);
-  border: 2px solid #5c5c7a;
-  box-shadow: inset 0 0 18px rgba(44, 232, 245, 0.14);
+  width: 126px;
+  height: 126px;
   touch-action: none;
+  user-select: none;
+  filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.72));
+}
+
+.cross-arm {
+  position: absolute;
+  background: linear-gradient(145deg, #2a2a3e 0%, #151522 100%);
+  border: 2px solid #585876;
+  border-radius: 7px;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.12), inset 0 -2px 0 rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.cross-v {
+  left: 34%;
+  top: 4%;
+  width: 32%;
+  height: 92%;
+}
+
+.cross-h {
+  left: 4%;
+  top: 34%;
+  width: 92%;
+  height: 32%;
+}
+
+.cross-h::after {
+  content: '';
+  position: absolute;
+  inset: 2px 28%;
+  background: linear-gradient(145deg, #252538 0%, #161624 100%);
+}
+
+.cross-center-dimple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 60% 65%, #2a2a3d 0%, #0d0d16 72%);
+  border: 1px solid #44445e;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cross-arrow {
+  position: absolute;
+  font-size: 12px;
+  color: #9ca3c0;
+  pointer-events: none;
+  z-index: 3;
+  transition: color 0.06s ease, transform 0.06s ease, text-shadow 0.06s ease;
+}
+
+.cross-up {
+  left: 50%;
+  top: 11px;
+  transform: translateX(-50%);
+}
+
+.cross-down {
+  left: 50%;
+  bottom: 11px;
+  transform: translateX(-50%);
+}
+
+.cross-left {
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.cross-right {
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.cross-dpad.dir-up .cross-up,
+.cross-dpad.dir-down .cross-down,
+.cross-dpad.dir-left .cross-left,
+.cross-dpad.dir-right .cross-right {
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(44, 232, 245, 0.9);
+  transform-origin: center;
+}
+
+.cross-dpad.dir-up .cross-up {
+  transform: translateX(-50%) scale(1.22);
+}
+
+.cross-dpad.dir-down .cross-down {
+  transform: translateX(-50%) scale(1.22);
+}
+
+.cross-dpad.dir-left .cross-left {
+  transform: translateY(-50%) scale(1.22);
+}
+
+.cross-dpad.dir-right .cross-right {
+  transform: translateY(-50%) scale(1.22);
+}
+
+/* Full-Grip Floating Dynamic Thumbstick Zone */
+.float-stick-zone {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  border-radius: 14px;
+  background: radial-gradient(circle, rgba(28, 30, 52, 0.85) 0%, rgba(10, 10, 20, 0.94) 85%);
+  border: 1.5px dashed #445072;
+  touch-action: none;
+  user-select: none;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.vstick-nub {
-  width: 44px;
-  height: 44px;
+.float-stick-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 92px;
+  height: 92px;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #67e8f9, #1d4ed8 72%);
+  background: radial-gradient(circle, rgba(36, 40, 68, 0.65) 0%, rgba(12, 14, 26, 0.92) 74%);
+  border: 2px solid #5c688c;
+  box-shadow: inset 0 0 14px rgba(44, 232, 245, 0.16);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.float-stick-zone.touching .float-stick-ring {
+  border-color: var(--cyan);
+  box-shadow: inset 0 0 18px rgba(44, 232, 245, 0.3), 0 0 12px rgba(44, 232, 245, 0.25);
+}
+
+.float-stick-nub {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 32%, #67e8f9, #1d4ed8 72%);
   border: 2px solid #ffffff;
-  box-shadow: 0 0 12px rgba(44, 232, 245, 0.55);
+  box-shadow: 0 0 12px rgba(44, 232, 245, 0.65);
   pointer-events: none;
   transform: translate(0px, 0px);
-  transition: transform 0.04s linear;
+}
+
+.float-stick-hint {
+  position: absolute;
+  bottom: 4px;
+  font-family: 'VT323', monospace;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  color: rgba(152, 168, 200, 0.55);
+  pointer-events: none;
+}
+
+.gb-pills {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.gb-pill-btn {
+  min-width: 72px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #32344a 0%, #1c1d2b 100%);
+  border-color: #646888;
+  font-size: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  transform: rotate(-16deg);
+}
+
+.gb-pill-btn:active,
+.gb-pill-btn.active-touch {
+  transform: rotate(-16deg) translateY(2px) scale(0.96);
+}
+
+.gb-pill-btn small {
+  font-family: 'VT323', monospace;
+  font-size: 11px;
+  color: var(--cyan);
+}
+
+.gb-speaker {
+  display: flex;
+  gap: 5px;
+  align-self: flex-end;
+  padding-right: 4px;
+  opacity: 0.55;
+}
+
+.gb-speaker span {
+  display: block;
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  background: #090910;
+  border-right: 1px solid #40425c;
+  transform: rotate(-28deg);
 }
 
 /* Mobile Slide-Out Command Drawer */
@@ -680,6 +908,7 @@ body {
 
   .mobile-header-actions {
     display: flex;
+    flex-shrink: 0;
   }
 
   .hud-bar {
@@ -704,7 +933,7 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 112px;
+    max-width: 104px;
   }
 
   .mode-pill {
@@ -714,13 +943,9 @@ body {
     flex-shrink: 0;
   }
 
-  .mobile-header-actions {
-    flex-shrink: 0;
-  }
-
   .mobile-header-actions .hud-btn-sm {
-    padding: 3px 7px;
-    font-size: 14px;
+    padding: 3px 6px;
+    font-size: 13px;
     white-space: nowrap;
   }
 
@@ -728,26 +953,122 @@ body {
     display: none;
   }
 
-  .touch-controls {
-    display: flex;
-    width: 100%;
-    padding: 10px 12px;
-    gap: 8px;
-    border-radius: 8px;
-  }
-
   .canvas-shell {
     width: 100%;
     touch-action: none;
   }
+}
 
-  .act-btn {
-    width: 50px;
-    height: 50px;
-    font-size: 12px;
+/* Portrait Mobile: Sculpted Nintendo Game Boy Chassis */
+@media (max-width: 780px) and (orientation: portrait),
+  (hover: none) and (pointer: coarse) and (orientation: portrait) {
+  .canvas-shell {
+    overflow: visible;
+    border: 10px solid #25273c;
+    border-left-width: 14px;
+    border-right-width: 14px;
+    border-bottom-width: 18px;
+    border-radius: 10px 10px 24px 10px;
+    box-shadow: 0 0 0 2px #0a0b12, 0 16px 32px rgba(0, 0, 0, 0.85);
+  }
+
+  .canvas-shell #gameCanvas {
+    border-radius: 2px 2px 10px 2px;
+  }
+
+  .canvas-shell::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 18px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ff2a55;
+    box-shadow: 0 0 8px #ff2a55;
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .touch-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    gap: 10px 8px;
+    width: 100%;
+    padding: 14px 12px 16px;
+    border-radius: 14px 14px 26px 14px;
+    border: 2px solid #444766;
+    background: linear-gradient(180deg, #212335 0%, #151624 100%);
+  }
+
+  .deck-left {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .deck-right {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .deck-right .act-c {
+    display: none;
+  }
+
+  .ab-cluster {
+    gap: 14px;
+    padding: 12px 0;
+  }
+
+  .act-btn.gb-b,
+  .act-btn.gb-a {
+    width: 58px;
+    height: 58px;
+    font-size: 14px;
+  }
+
+  .gb-b {
+    transform: translateY(12px);
+  }
+
+  .gb-a {
+    transform: translateY(-10px);
+  }
+
+  .gb-b:active,
+  .gb-b.active-touch {
+    transform: translateY(14px) scale(0.96);
+  }
+
+  .gb-a:active,
+  .gb-a.active-touch {
+    transform: translateY(-8px) scale(0.96);
+  }
+
+  .deck-center {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 4px 14px 0;
+  }
+
+  .cross-dpad {
+    width: 126px;
+    height: 126px;
+  }
+
+  .float-stick-zone {
+    width: 134px;
+    height: 134px;
   }
 }
 
+/* Landscape Mobile: Full-Height 3-Column Switch Handheld Grip Layout */
 @media (max-height: 540px) and (orientation: landscape) {
   html,
   body {
@@ -758,7 +1079,7 @@ body {
   #app {
     height: 100dvh;
     min-height: 0;
-    padding: 4px 10px;
+    padding: 4px 8px;
     gap: 4px;
     overflow: hidden;
   }
@@ -774,7 +1095,8 @@ body {
 
   .hud-bar {
     flex-wrap: nowrap;
-    padding: 4px 10px;
+    padding: 3px 8px;
+    gap: 6px;
   }
 
   .controls-strip {
@@ -785,10 +1107,11 @@ body {
     flex: 1;
     min-height: 0;
     max-width: 100%;
+    height: 100%;
     display: grid;
-    grid-template-columns: 132px minmax(0, 1fr) 132px;
+    grid-template-columns: 156px minmax(0, 1fr) 156px;
     grid-template-rows: minmax(0, 1fr);
-    align-items: center;
+    align-items: stretch;
     justify-items: center;
     gap: 8px;
   }
@@ -797,11 +1120,33 @@ body {
     display: contents;
   }
 
+  .deck-center {
+    display: none;
+  }
+
   .deck-left {
     grid-column: 1;
     grid-row: 1;
-    justify-self: center;
-    align-self: center;
+    width: 100%;
+    height: 100%;
+    justify-self: stretch;
+    align-self: stretch;
+    padding: 6px;
+    border-radius: 16px 6px 6px 16px;
+    background: linear-gradient(180deg, rgba(24, 34, 52, 0.92) 0%, rgba(14, 18, 30, 0.95) 100%);
+    border: 2px solid #2c4a6e;
+  }
+
+  .cross-dpad {
+    width: 132px;
+    height: 132px;
+  }
+
+  .float-stick-zone {
+    width: 100%;
+    flex: 1;
+    min-height: 150px;
+    height: auto;
   }
 
   .canvas-shell {
@@ -812,25 +1157,59 @@ body {
     max-height: 100%;
     max-width: 100%;
     aspect-ratio: 4 / 3;
+    border: 3px solid #ffffff;
+    border-radius: 4px;
+    box-shadow: 0 0 0 2px #000;
   }
 
   .deck-right {
     grid-column: 3;
     grid-row: 1;
-    justify-self: center;
-    align-self: center;
+    width: 100%;
+    height: 100%;
+    justify-self: stretch;
+    align-self: stretch;
+    padding: 8px;
+    border-radius: 6px 16px 16px 6px;
+    background: linear-gradient(180deg, rgba(48, 22, 34, 0.92) 0%, rgba(24, 12, 20, 0.95) 100%);
+    border: 2px solid #6e2c44;
     flex-direction: column;
-    gap: 8px;
+    gap: 20px;
   }
 
-  .vstick-base {
-    width: 96px;
-    height: 96px;
+  .ab-cluster {
+    gap: 10px;
   }
 
-  .act-btn {
+  .act-btn.gb-b,
+  .act-btn.gb-a {
     width: 56px;
-    height: 44px;
-    font-size: 11px;
+    height: 56px;
+    font-size: 13px;
+  }
+
+  .gb-b {
+    transform: translateY(6px);
+  }
+
+  .gb-a {
+    transform: translateY(-10px);
+  }
+
+  .gb-b:active,
+  .gb-b.active-touch {
+    transform: translateY(8px) scale(0.96);
+  }
+
+  .gb-a:active,
+  .gb-a.active-touch {
+    transform: translateY(-8px) scale(0.96);
+  }
+
+  .deck-right .act-c {
+    display: flex;
+    width: 104px;
+    height: 34px;
+    border-radius: 17px;
   }
 }

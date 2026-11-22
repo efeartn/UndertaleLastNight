@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>UNDERTALE: LAST NIGHT</title>
-  <meta name="description" content="Playable 4-phase Undertale fan game with 16 non-repeating attacks, original 138-168 BPM Web Audio OST, Twilight Antechamber, and W.D. Gaster 4th-wall breaks.">
+  <meta name="description" content="Playable 5-phase Undertale fan game with 24 non-repeating attacks, Hardcore difficulty, original 138-168 BPM Web Audio OST, Twilight Antechamber, and W.D. Gaster 4th-wall breaks.">
   <meta name="theme-color" content="#050508">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
@@ -13,7 +13,7 @@
   <link rel="manifest" href="site.webmanifest">
   <meta property="og:type" content="website">
   <meta property="og:title" content="UNDERTALE: LAST NIGHT">
-  <meta property="og:description" content="4-Phase playable Undertale fan game with 16 non-repeating attacks, original 138-168 BPM Web Audio soundtrack, and W.D. Gaster 4th-wall breaks.">
+  <meta property="og:description" content="5-Phase playable Undertale fan game with 24 non-repeating attacks, Hardcore difficulty, original 138-168 BPM Web Audio soundtrack, and W.D. Gaster 4th-wall breaks.">
   <meta property="og:url" content="https://efeartn.github.io/UndertaleLastNight/">
   <meta property="og:image" content="https://efeartn.github.io/UndertaleLastNight/assets/og-preview.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -42,6 +42,7 @@
         </div>
         <button id="btnCRT" class="hud-btn" type="button" title="Toggle CRT Scanlines">📺 CRT</button>
         <button id="btnAssist" class="hud-btn" type="button" title="Practice Assist (No Death)">🛡 Assist</button>
+        <button id="btnDifficulty" class="hud-btn diff-hard" type="button" title="Cycle Difficulty (Normal / Hard / Nightmare)">🔥 Diff: HARD</button>
 
         <div class="phase-jump-group" aria-label="Quick Phase Jump & Modes">
           <span class="hud-label">Play:</span>
@@ -51,17 +52,18 @@
           <button id="btnJumpP3" class="hud-btn hud-btn-sm" type="button" title="Jump to Phase 3">P3</button>
           <button id="btnJumpP4" class="hud-btn hud-btn-sm" type="button" title="Jump to Phase 4 (Void Fracture)">P4</button>
           <button id="btnJumpP5" class="hud-btn hud-btn-sm" type="button" title="Jump to Secret Phase 5 (Gaster Unbound)">P5</button>
-          <button id="btnAttackSelect" class="hud-btn hud-btn-sm" type="button" title="Browse & Practice All 20 Attacks">🎯 Attacks</button>
-          <button id="btnBossRush" class="hud-btn hud-btn-sm" type="button" title="Fight All 20 Attacks Back-to-Back">🔥 Rush</button>
+          <button id="btnAttackSelect" class="hud-btn hud-btn-sm" type="button" title="Browse & Practice All 24 Attacks">🎯 Attacks</button>
+          <button id="btnBossRush" class="hud-btn hud-btn-sm" type="button" title="Fight All 24 Attacks Back-to-Back">🔥 Rush</button>
           <button id="btnEndless" class="hud-btn hud-btn-sm" type="button" title="Endless Survival Mode (Phases 2-5)">∞ Endless</button>
         </div>
 
         <button id="btnJukebox" class="hud-btn hud-btn-sm" type="button" title="Open Sound Test & Live Visualizer">🎵 Jukebox</button>
         <button id="btnModifiers" class="hud-btn hud-btn-sm" type="button" title="Challenge Modifiers, SOUL Skins & Endless Leaderboard">⚡ Mods</button>
-        <button id="btnAchievements" class="hud-btn" type="button" title="View Unlocked Trophies">🏆 Trophies (<span id="achCount">0/12</span>)</button>
+        <button id="btnAchievements" class="hud-btn" type="button" title="View Unlocked Trophies">🏆 Trophies (<span id="achCount">0/14</span>)</button>
         <button id="btnFullscreen" class="hud-btn" type="button" title="Fullscreen">⛶</button>
       </div>
       <div class="mobile-header-actions" aria-label="Mobile quick controls">
+        <button id="btnMobileDiff" class="hud-btn hud-btn-sm diff-hard" type="button" aria-label="Cycle Difficulty">🔥 HARD</button>
         <button id="btnMobileMute" class="hud-btn hud-btn-sm" type="button" aria-label="Toggle Audio">🔊</button>
         <button id="btnMobileMenu" class="hud-btn hud-btn-sm" type="button" aria-label="Open Game Menu">☰ Menu</button>
       </div>
@@ -81,25 +83,40 @@
         <span><strong>Mouse:</strong> Click Menus</span>
       </div>
 
-      <!-- Handheld Touch / Virtual Joystick & D-Pad Deck -->
+      <!-- Handheld Game Boy (Portrait) / Switch Side-Grip (Landscape) Touch Deck -->
       <div class="touch-controls" aria-label="Handheld touch controls">
         <div class="deck-left">
-          <button id="btnPadSwap" class="pad-swap-btn" type="button" title="Switch Stick / D-Pad">🕹 Stick</button>
-          <div id="virtualStick" class="vstick-base" aria-label="Virtual Thumbstick">
-            <div id="vstickNub" class="vstick-nub"></div>
+          <button id="btnPadSwap" class="pad-swap-btn" type="button" title="Switch Precision D-Pad / Floating Stick">✚ D-Pad</button>
+          <div id="crossDpad" class="cross-dpad" role="group" aria-label="Precision Cross D-Pad">
+            <div class="cross-arm cross-v" aria-hidden="true"></div>
+            <div class="cross-arm cross-h" aria-hidden="true"></div>
+            <div class="cross-center-dimple" aria-hidden="true"></div>
+            <span class="cross-arrow cross-up" data-dir="up" aria-hidden="true">▲</span>
+            <span class="cross-arrow cross-down" data-dir="down" aria-hidden="true">▼</span>
+            <span class="cross-arrow cross-left" data-dir="left" aria-hidden="true">◀</span>
+            <span class="cross-arrow cross-right" data-dir="right" aria-hidden="true">▶</span>
           </div>
-          <div id="classicDpad" class="dpad hidden" aria-label="Classic D-Pad">
-            <button class="pad-btn pad-up" data-key="ArrowUp" type="button">▲</button>
-            <div class="dpad-mid">
-              <button class="pad-btn pad-left" data-key="ArrowLeft" type="button">◀</button>
-              <button class="pad-btn pad-down" data-key="ArrowDown" type="button">▼</button>
-              <button class="pad-btn pad-right" data-key="ArrowRight" type="button">▶</button>
+          <div id="floatStickZone" class="float-stick-zone hidden" aria-label="Floating Analog Thumbstick">
+            <div id="floatStickRing" class="float-stick-ring">
+              <div id="floatStickNub" class="float-stick-nub"></div>
             </div>
+            <span class="float-stick-hint">DRAG ANYWHERE</span>
+          </div>
+        </div>
+        <div class="deck-center" aria-label="Game Boy Select and Start">
+          <div class="gb-pills">
+            <button class="gb-pill-btn" data-key="KeyC" type="button">SELECT<small>MENU</small></button>
+            <button class="gb-pill-btn" data-key="Enter" type="button">START<small>OK</small></button>
+          </div>
+          <div class="gb-speaker" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
           </div>
         </div>
         <div class="deck-right action-buttons">
-          <button class="act-btn act-z" data-key="KeyZ" type="button">Z<small>OK/SHOT</small></button>
-          <button class="act-btn act-x" data-key="KeyX" type="button">X<small>DASH</small></button>
+          <div class="ab-cluster">
+            <button class="act-btn act-x gb-b" data-key="KeyX" type="button">B<small>X/DASH</small></button>
+            <button class="act-btn act-z gb-a" data-key="KeyZ" type="button">A<small>Z/SHOT</small></button>
+          </div>
           <button class="act-btn act-c" data-key="KeyC" type="button">C<small>MENU</small></button>
         </div>
       </div>
@@ -135,13 +152,14 @@
           <button class="hud-btn" data-drawer-trigger="btnAchievements" type="button">🏆 Trophies</button>
           <button class="hud-btn" data-drawer-trigger="btnCRT" type="button">📺 CRT</button>
           <button class="hud-btn" data-drawer-trigger="btnAssist" type="button">🛡 Assist</button>
+          <button id="btnDrawerDiff" class="hud-btn diff-hard" type="button">🔥 Diff: HARD</button>
           <button class="hud-btn" data-drawer-trigger="btnFullscreen" type="button">⛶ Fullscreen</button>
         </div>
       </div>
       <div class="drawer-section">
         <div class="drawer-title">TOUCH CONTROLS &amp; AUDIO</div>
         <div class="drawer-row">
-          <button id="btnDrawerPadSwap" class="hud-btn" type="button">Pad: Virtual Joystick</button>
+          <button id="btnDrawerPadSwap" class="hud-btn" type="button">Pad: Precision D-Pad</button>
           <button class="hud-btn" data-drawer-trigger="btnMute" type="button">🔊 Audio Mute</button>
         </div>
         <label class="vol-wrap drawer-vol">
