@@ -58,8 +58,8 @@
         </div>
 
         <button id="btnJukebox" class="hud-btn hud-btn-sm" type="button" title="Open Sound Test & Live Visualizer">🎵 Jukebox</button>
-        <button id="btnModifiers" class="hud-btn hud-btn-sm" type="button" title="Challenge Modifiers, SOUL Skins & Endless Leaderboard">⚡ Mods</button>
-        <button id="btnAchievements" class="hud-btn" type="button" title="View Unlocked Trophies">🏆 Trophies (<span id="achCount">0/14</span>)</button>
+        <button id="btnModifiers" class="hud-btn hud-btn-sm" type="button" title="Name, Outfits, Modifiers, SOUL Skins & Leaderboard">⚡ Mods</button>
+        <button id="btnAchievements" class="hud-btn" type="button" title="View Unlocked Trophies">🏆 Trophies (<span id="achCount">0/16</span>)</button>
         <button id="btnFullscreen" class="hud-btn" type="button" title="Fullscreen">⛶</button>
       </div>
       <div class="mobile-header-actions" aria-label="Mobile quick controls">
@@ -76,11 +76,11 @@
       </div>
 
       <div class="controls-strip">
-        <span><strong>Move / Web / Shield:</strong> Arrows / WASD</span>
-        <span><strong>Confirm / Shoot / Big Shot:</strong> Z / Enter</span>
-        <span><strong>Dash / Back:</strong> X / Shift</span>
-        <span><strong>Menu:</strong> C / Esc</span>
-        <span><strong>Mouse:</strong> Click Menus</span>
+        <span><strong>Move:</strong> Arrows/WASD</span>
+        <span><strong>Confirm/Shot:</strong> Z/Enter</span>
+        <span><strong>Dash/Sprint:</strong> X/Shift</span>
+        <span><strong>Menu/Ult (80% TP):</strong> C</span>
+        <span><strong>Pause:</strong> P/Esc</span>
       </div>
 
       <!-- Handheld Game Boy (Portrait) / Switch Side-Grip (Landscape) Touch Deck -->
@@ -197,6 +197,13 @@
         <h2 id="modifiersModalTitle">⚡ MODIFIERS, SOUL SKINS &amp; ENDLESS TOP 5</h2>
         <button id="btnCloseModifiers" class="hud-btn hud-btn-sm" type="button" aria-label="Close">✕</button>
       </div>
+      <div class="mod-section-title">FALLEN HUMAN NAME &amp; OUTFIT</div>
+      <div class="name-row">
+        <input id="inpPlayerName" class="name-input" type="text" maxlength="10" placeholder="FRISK" aria-label="Human Name">
+        <button id="btnSavePlayerName" class="hud-btn hud-btn-sm" type="button">Apply Name</button>
+        <span id="nameReaction" class="name-reaction"></span>
+      </div>
+      <div id="outfitsGrid" class="skin-grid"></div>
       <div class="mod-section-title">CHALLENGE MODIFIERS</div>
       <div id="modifiersGrid" class="mod-grid"></div>
       <div class="mod-section-title">SOUL AURA SKINS</div>

@@ -511,6 +511,21 @@ class SoundEngine {
     this._tone(140, 90, 0.12, 'triangle', 0.14, 'sfx', 0.08);
   }
 
+  critSlash() {
+    this._tone(1320, 2200, 0.09, 'triangle', 0.2, 'sfx', 0);
+    this._tone(880, 1760, 0.16, 'sine', 0.18, 'sfx', 0.02);
+    this._tone(1760, 1760, 0.18, 'sine', 0.11, 'sfx', 0.05);
+    this._noise(0.11, 3800, 'highpass', 0.18, 'sfx', 0);
+  }
+
+  overdriveBurst() {
+    this._tone(140, 42, 0.36, 'sawtooth', 0.24, 'sfx', 0);
+    this._noise(0.32, 1600, 'bandpass', 0.22, 'sfx', 0);
+    [587.33, 739.99, 880, 1174.66, 1479.98].forEach((n, idx) => {
+      this._tone(n, n * 1.01, 0.14, 'triangle', 0.13, 'sfx', 0.02 + idx * 0.032);
+    });
+  }
+
   setTempoMult(mult) {
     const v = Number(mult);
     this.tempoMult = Number.isFinite(v) ? Math.max(0.65, Math.min(1.45, v)) : 1.0;

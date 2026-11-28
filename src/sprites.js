@@ -147,19 +147,19 @@ function makeGrazeOutlineGrid(heartGrid) {
 // ============================================================================
 
 const SOUL_GRID = [
-  '..rrrr....rrrr..',
-  '.rrrrrr..rrrrrr.',
-  'rrrrrrrrrrrrrrrr',
-  'rrrrrrrrrrrrrrrr',
-  'rrrrrrrrrrrrrrrr',
-  'rrrrrrrrrrrrrrrr',
-  '.rrrrrrrrrrrrrr.',
-  '..rrrrrrrrrrrr..',
-  '...rrrrrrrrrr...',
-  '....rrrrrrrr....',
-  '.....rrrrrr.....',
-  '......rrrr......',
-  '.......rr.......',
+  '..hhrr....rrdd..',
+  '.rhhhrr..rrrrdd.',
+  'rhhrrrrrrrrrrrdd',
+  'rhhrrrrrrrrrrrdd',
+  'rhrrrrrrrrrrrrdd',
+  'rrrrrrrrrrrrrrdd',
+  '.rrrrrrrrrrrrdd.',
+  '..rrrrrrrrrrdd..',
+  '...rrrrrrrrdd...',
+  '....rrrrrrdd....',
+  '.....rrrrdd.....',
+  '......rrdd......',
+  '.......rd.......',
   '................',
   '................',
   '................'
@@ -168,17 +168,17 @@ const SOUL_GRID = [
 const SOUL_YELLOW_GRID = [
   '.......mm.......',
   '......rmmr......',
-  '.....rrrrrr.....',
-  '....rrrrrrrr....',
-  '...rrrrrrrrrr...',
-  '..rrrrrrrrrrrr..',
-  '.rrrrrrrrrrrrrr.',
-  'rrrrrrrrrrrrrrrr',
-  'rrrrrrrrrrrrrrrr',
-  'rrrrrrrrrrrrrrrr',
-  'rrrrrrrrrrrrrrrr',
-  '.rrrrrr..rrrrrr.',
-  '..rrrr....rrrr..',
+  '.....rhhrrr.....',
+  '....rhhrrrrd....',
+  '...rhhrrrrrrd...',
+  '..rhhrrrrrrrrd..',
+  '.rhhrrrrrrrrrrd.',
+  'rhhrrrrrrrrrrrdd',
+  'rhhrrrrrrrrrrrdd',
+  'rrrrrrrrrrrrrrdd',
+  'rrrrrrrrrrrrrrdd',
+  '.rrrrrd..rrrrdd.',
+  '..rrdd....rrdd..',
   '................',
   '................',
   '................'
@@ -293,6 +293,16 @@ export const SOUL_SKINS = {
   gaster_mono: { id: 'gaster_mono', name: 'Void Mono', trim: '#e2e8f0', altTrim: '#a855f7', desc: 'Gaster Secret Vault emblem.' }
 };
 
+const SOUL_MODE_PALS = {
+  red: { r: '#ff1e1e', h: '#ff8a8a', d: '#b00810' },
+  blue: { r: '#0048ff', h: '#78aaff', d: '#002299' },
+  green: { r: '#22e646', h: '#9effb0', d: '#0e8f2a' },
+  yellow: { r: '#ffef3f', h: '#ffffcc', d: '#c99700' },
+  purple: { r: '#d946ef', h: '#f5b8ff', d: '#86198f' },
+  cyan: { r: '#2ce8f5', h: '#b8ffff', d: '#0b8ca8' },
+  orange: { r: '#ffa024', h: '#ffe099', d: '#b85400' }
+};
+
 export function drawSoul(ctx, x, y, mode = 'red', options = {}) {
   const {
     gravity = 'down',
@@ -308,17 +318,11 @@ export function drawSoul(ctx, x, y, mode = 'red', options = {}) {
     dashReady = false
   } = options;
 
-  const colorMap = {
-    red: '#ff1e1e',
-    blue: '#003cff',
-    green: '#22e646',
-    yellow: '#ffef3f',
-    purple: '#d946ef',
-    cyan: '#2ce8f5',
-    orange: '#ffa024'
-  };
-  const baseColor = colorMap[mode] || '#ff1e1e';
-  const fill = flash ? '#ffffff' : baseColor;
+  const palSpec = SOUL_MODE_PALS[mode] || SOUL_MODE_PALS.red;
+  const fill = flash ? '#ffffff' : palSpec.r;
+  const soulPal = flash
+    ? { r: '#ffffff', h: '#ffffff', d: '#ffffff' }
+    : palSpec;
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -394,15 +398,20 @@ export function drawSoul(ctx, x, y, mode = 'red', options = {}) {
     const muzzle = flash ? '#ffffff' : '#ffffd4';
     const spr = drawPixelGrid(
       SOUL_YELLOW_GRID,
-      { r: fill, m: muzzle },
+      { ...soulPal, m: muzzle },
       1,
-      `soul-yellow-${fill}`
+      `soul-yellow-v2-${flash ? 'f' : mode}`
     );
     if (spr) {
       ctx.drawImage(spr, -8, -7);
     }
   } else {
-    const spr = drawPixelGrid(SOUL_GRID, { r: fill }, 1, `soul-${fill}`);
+    const spr = drawPixelGrid(
+      SOUL_GRID,
+      soulPal,
+      1,
+      `soul-v2-${flash ? 'f' : (SOUL_MODE_PALS[mode] ? mode : 'red')}`
+    );
     if (spr) {
       ctx.drawImage(spr, -8, -7);
     }
@@ -449,157 +458,336 @@ export function drawSoulShard(ctx, x, y, rot, color = '#ff1e1e') {
 }
 
 // ============================================================================
-// 2. FRISK OVERWORLD SPRITE (16x16, 4-frame walk cycle in 4 directions)
+// 2. PLAYER CHARACTER OVERWORLD SPRITE (24x28, 4-frame walk cycle + Outfits)
 // ============================================================================
 
-const FRISK_PAL = {
-  H: '#4a2511', // hair
-  D: '#2b1307', // hair shadow / bangs
-  S: '#ffd573', // skin
-  A: '#e0aa45', // skin shadow
-  E: '#241106', // closed eyes
-  B: '#3b4cca', // sweater blue
-  C: '#27349c', // sweater shadow
-  P: '#cc44b8', // sweater magenta stripes
-  N: '#1c2159', // pants
-  T: '#3b2416'  // shoes
+export const CHAR_OUTFITS = {
+  frisk: {
+    id: 'frisk',
+    name: 'Frisk (Classic)',
+    badgeColor: '#38bdf8',
+    desc: 'Classic blue sweater, magenta stripes & determination.',
+    pal: {
+      K: '#09070e', // crisp ink outline
+      H: '#4a2511', // hair midtone
+      L: '#6b3a1e', // hair highlight
+      D: '#291206', // hair shadow / bangs
+      S: '#ffd678', // skin
+      A: '#dca446', // skin shadow
+      R: '#ff9678', // cheek blush
+      E: '#1f0d05', // eyes
+      B: '#3252d4', // sweater blue
+      C: '#1e359c', // sweater shadow
+      P: '#d142be', // magenta stripe
+      M: '#96278b', // stripe shadow
+      N: '#1c215e', // pants
+      I: '#11143d', // pants shadow
+      T: '#4a2d1b', // boots
+      U: '#2b170c'  // boot sole shadow
+    }
+  },
+  chara: {
+    id: 'chara',
+    name: 'Chara (Royal)',
+    badgeColor: '#4ade80',
+    desc: 'Emerald green sweater, cream stripe & crimson eyes.',
+    pal: {
+      K: '#09070e',
+      H: '#592f16',
+      L: '#7a4524',
+      D: '#331708',
+      S: '#ffe3ad',
+      A: '#e0b875',
+      R: '#ff7a7a',
+      E: '#b81428',
+      B: '#22a854',
+      C: '#147337',
+      P: '#f5eba6',
+      M: '#c9ba69',
+      N: '#3b271a',
+      I: '#24160d',
+      T: '#361f12',
+      U: '#1c0e07'
+    }
+  },
+  kris: {
+    id: 'kris',
+    name: 'Kris (Dark World)',
+    badgeColor: '#2ce8f5',
+    desc: 'Slate indigo hair, cyan mantle trim & dark knight tunic.',
+    pal: {
+      K: '#070912',
+      H: '#2b1912',
+      L: '#4a2f24',
+      D: '#140a07',
+      S: '#f7d863',
+      A: '#cfb038',
+      R: '#e89c56',
+      E: '#ff2a3c',
+      B: '#1d65b8',
+      C: '#104080',
+      P: '#45e8ff',
+      M: '#1ca6cc',
+      N: '#1b2242',
+      I: '#0f142b',
+      T: '#2e3754',
+      U: '#171d33'
+    }
+  },
+  twilight: {
+    id: 'twilight',
+    name: 'Twilight Vessel',
+    badgeColor: '#c084fc',
+    desc: 'Judgment Hall shadow cloak with glowing violet runes.',
+    pal: {
+      K: '#06050c',
+      H: '#2c2747',
+      L: '#4c4478',
+      D: '#161326',
+      S: '#e6e4f2',
+      A: '#b8b4cc',
+      R: '#a992db',
+      E: '#2ce8f5',
+      B: '#492885',
+      C: '#2c1557',
+      P: '#d946ef',
+      M: '#9333ea',
+      N: '#1a162e',
+      I: '#0d0a1a',
+      T: '#27223d',
+      U: '#131021'
+    }
+  }
 };
 
+// 24x28 High-Detail Facing Down
 const FRISK_DOWN_IDLE = [
-  '.....HHHHHH.....',
-  '...HHHHHHHHHH...',
-  '..HHHHHHHHHHHH..',
-  '..HHSSSSSSSSHH..',
-  '..HHSEESSEESHH..',
-  '..DDSSSSSSSSDD..',
-  '...DSSSSSSSSD...',
-  '....BBBBBBBB....',
-  '...BBBBBBBBBB...',
-  '...BPPPPPPPPB...',
-  '...BBBBBBBBBB...',
-  '...SSPPPPPPSS...',
-  '....BBBBBBBB....',
-  '....NNN..NNN....',
-  '....NNN..NNN....',
-  '....TTT..TTT....'
+  '.......KKKKKKKKKK.......',
+  '.....KKHHHHHHHHHHKK.....',
+  '....KHLLLHHHHHHHHHHK....',
+  '...KHHLLLHHHHHHHHHHHK...',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHDDDDDDDDDDDDDDHHK..',
+  '..KHHDSSSSSSSSSSSSDDHK..',
+  '..KHHSSSEESSSSEESSSHHK..',
+  '..KHHSSRSSSSSSSSSSRHHK..',
+  '..KDDSSSSSSSSSSSSSSDDK..',
+  '...KKAAASSSSSSSSAAAKK...',
+  '.....KKKKKKKKKKKKKK.....',
+  '....KBBBBBBBBBBBBBBK....',
+  '...KBBPPPPPPPPPPPPBBK...',
+  '..KBBMMMMMMMMMMMMMMBBK..',
+  '..KCCBBBBBBBBBBBBBBCCK..',
+  '..KCCKPPPPPPPPPPPPKCCK..',
+  '..KSSKCCCCCCCCCCCCKSSK..',
+  '..KAAKKKKKKKKKKKKKKAAK..',
+  '...KKKNNNNNNNNNNNNKKK...',
+  '.....KNNNNIKKINNNNK.....',
+  '.....KNNNNK..KNNNNK.....',
+  '.....KIIIIK..KIIIIK.....',
+  '....KTTTTTK..KTTTTTK....',
+  '....KTUUUTK..KTUUUTK....',
+  '....KUUUUUK..KUUUUUK....',
+  '.....KKKKK....KKKKK.....',
+  '........................'
 ];
 
 const FRISK_DOWN_STEP_A = [
-  '.....HHHHHH.....',
-  '...HHHHHHHHHH...',
-  '..HHHHHHHHHHHH..',
-  '..HHSSSSSSSSHH..',
-  '..HHSEESSEESHH..',
-  '..DDSSSSSSSSDD..',
-  '...DSSSSSSSSD...',
-  '....BBBBBBBB....',
-  '...BBBBBBBBBB...',
-  '...BPPPPPPPPB...',
-  '..CBBBBBBBBBBSA.',
-  '..SSPPPPPPBBC...',
-  '....BBBBBBBB....',
-  '...NNN....NNN...',
-  '...NNN....TTT...',
-  '...TTT..........'
+  '.......KKKKKKKKKK.......',
+  '.....KKHHHHHHHHHHKK.....',
+  '....KHLLLHHHHHHHHHHK....',
+  '...KHHLLLHHHHHHHHHHHK...',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHDDDDDDDDDDDDDDHHK..',
+  '..KHHDSSSSSSSSSSSSDDHK..',
+  '..KHHSSSEESSSSEESSSHHK..',
+  '..KHHSSRSSSSSSSSSSRHHK..',
+  '..KDDSSSSSSSSSSSSSSDDK..',
+  '...KKAAASSSSSSSSAAAKK...',
+  '.....KKKKKKKKKKKKKK.....',
+  '....KBBBBBBBBBBBBBBK....',
+  '...KBBPPPPPPPPPPPPBBK...',
+  '..KCCMMMMMMMMMMMMMMBBK..',
+  '..KCCBBBBBBBBBBBBBBCCK..',
+  '..KCCKPPPPPPPPPPPPKSSK..',
+  '..KSSKCCCCCCCCCCCCKAAK..',
+  '..KAAKKKKKKKKKKKKKKK....',
+  '...KKKNNNNNNNNNNNNK.....',
+  '.....KNNNNIKKINNNNK.....',
+  '.....KNNNNK..KIIIIK.....',
+  '.....KIIIIK..KTTTTTK....',
+  '....KTTTTTK..KUUUUUK....',
+  '....KTUUUTK...KKKKK.....',
+  '....KUUUUUK.............',
+  '.....KKKKK..............',
+  '........................'
 ];
 
-const FRISK_DOWN_STEP_B = flipGridH(FRISK_DOWN_STEP_A);
+const FRISK_DOWN_STEP_B = composeGrid(flipGridH(FRISK_DOWN_STEP_A), {
+  2: FRISK_DOWN_IDLE[2],
+  3: FRISK_DOWN_IDLE[3]
+});
 
+// 24x28 High-Detail Facing Up
 const FRISK_UP_IDLE = [
-  '.....HHHHHH.....',
-  '...HHHHHHHHHH...',
-  '..HHHHHHHHHHHH..',
-  '..HHHHHHHHHHHH..',
-  '..HHHHHHHHHHHH..',
-  '..DDHHHHHHHHDD..',
-  '...DDDDDDDDDD...',
-  '....BBBBBBBB....',
-  '...BBBBBBBBBB...',
-  '...BPPPPPPPPB...',
-  '...BBBBBBBBBB...',
-  '...SSPPPPPPSS...',
-  '....BBBBBBBB....',
-  '....NNN..NNN....',
-  '....NNN..NNN....',
-  '....TTT..TTT....'
+  '.......KKKKKKKKKK.......',
+  '.....KKHHHHHHHHHHKK.....',
+  '....KHLLLHHHHHHHHHHK....',
+  '...KHHLLLHHHHHHHHHHHK...',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHDDDDDDDDDDDDDDHHK..',
+  '..KDDDDDDDDDDDDDDDDDDK..',
+  '...KKDDDDDDDDDDDDDDKK...',
+  '.....KKKKKKKKKKKKKK.....',
+  '....KBBBBBBBBBBBBBBK....',
+  '...KBBPPPPPPPPPPPPBBK...',
+  '..KBBMMMMMMMMMMMMMMBBK..',
+  '..KCCBBBBBBBBBBBBBBCCK..',
+  '..KCCKPPPPPPPPPPPPKCCK..',
+  '..KSSKCCCCCCCCCCCCKSSK..',
+  '..KAAKKKKKKKKKKKKKKAAK..',
+  '...KKKNNNNNNNNNNNNKKK...',
+  '.....KNNNNIKKINNNNK.....',
+  '.....KNNNNK..KNNNNK.....',
+  '.....KIIIIK..KIIIIK.....',
+  '....KTTTTTK..KTTTTTK....',
+  '....KUUUUUK..KUUUUUK....',
+  '....KUUUUUK..KUUUUUK....',
+  '.....KKKKK....KKKKK.....',
+  '........................'
 ];
 
 const FRISK_UP_STEP_A = [
-  '.....HHHHHH.....',
-  '...HHHHHHHHHH...',
-  '..HHHHHHHHHHHH..',
-  '..HHHHHHHHHHHH..',
-  '..HHHHHHHHHHHH..',
-  '..DDHHHHHHHHDD..',
-  '...DDDDDDDDDD...',
-  '....BBBBBBBB....',
-  '...BBBBBBBBBB...',
-  '...BPPPPPPPPB...',
-  '..CBBBBBBBBBBSA.',
-  '..SSPPPPPPBBC...',
-  '....BBBBBBBB....',
-  '...NNN....NNN...',
-  '...NNN....TTT...',
-  '...TTT..........'
+  '.......KKKKKKKKKK.......',
+  '.....KKHHHHHHHHHHKK.....',
+  '....KHLLLHHHHHHHHHHK....',
+  '...KHHLLLHHHHHHHHHHHK...',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHDDDDDDDDDDDDDDHHK..',
+  '..KDDDDDDDDDDDDDDDDDDK..',
+  '...KKDDDDDDDDDDDDDDKK...',
+  '.....KKKKKKKKKKKKKK.....',
+  '....KBBBBBBBBBBBBBBK....',
+  '...KBBPPPPPPPPPPPPBBK...',
+  '..KCCMMMMMMMMMMMMMMBBK..',
+  '..KCCBBBBBBBBBBBBBBCCK..',
+  '..KCCKPPPPPPPPPPPPKSSK..',
+  '..KSSKCCCCCCCCCCCCKAAK..',
+  '..KAAKKKKKKKKKKKKKKK....',
+  '...KKKNNNNNNNNNNNNK.....',
+  '.....KNNNNIKKINNNNK.....',
+  '.....KNNNNK..KIIIIK.....',
+  '.....KIIIIK..KTTTTTK....',
+  '....KTTTTTK..KUUUUUK....',
+  '....KUUUUUK...KKKKK.....',
+  '....KUUUUUK.............',
+  '.....KKKKK..............',
+  '........................'
 ];
 
-const FRISK_UP_STEP_B = flipGridH(FRISK_UP_STEP_A);
+const FRISK_UP_STEP_B = composeGrid(flipGridH(FRISK_UP_STEP_A), {
+  2: FRISK_UP_IDLE[2],
+  3: FRISK_UP_IDLE[3]
+});
 
+// 24x28 High-Detail Facing Right (Left is horizontal flip)
 const FRISK_RIGHT_IDLE = [
-  '.....HHHHHH.....',
-  '...HHHHHHHHHH...',
-  '..HHHHHHHHHHHH..',
-  '..HHHHHHSSSSHH..',
-  '..HHHHHHSSESHH..',
-  '..DDHHHHSSSSSD..',
-  '...DDHHHSSSSS...',
-  '....BBBBBBBB....',
-  '....BBBBBBBB....',
-  '....PPPPPPPP....',
-  '....BBBCBBBB....',
-  '....PPSSPPPP....',
-  '....BBBBBBBB....',
-  '.....NNNNNN.....',
-  '.....NNN.NN.....',
-  '.....TTT.TT.....'
+  '.......KKKKKKKKKK.......',
+  '.....KKHHHHHHHHHHKK.....',
+  '....KHLLLHHHHHHHHHHK....',
+  '...KHHLLLHHHHHHHHHHHK...',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHHHHHHHHDDDDDDDHHK..',
+  '..KHHHHHHHHDDSSSSSSSDK..',
+  '..KHHHHHHHHHHSSSEESSK...',
+  '..KHHHHHHHHRRSSSSSSSK...',
+  '..KHHHHDDDDSSSSSSSSSK...',
+  '...KKK..KKAAASSSSSKK....',
+  '........KKKKKKKKKK......',
+  '......KBBBBBBBBBBBBK....',
+  '.....KBBBPPPPPPPPBBBK...',
+  '.....KBBBMMMMMMMMBBBK...',
+  '.....KCCBBBBBBBBBBCCK...',
+  '.....KCCBBBBPPPPPPBBK...',
+  '.....KSSCCBBBBBBBBCCK...',
+  '.....KAAKKKKKKKKKKKK....',
+  '......KKKNNNNNNNNNK.....',
+  '.......KNNNNIINNNNK.....',
+  '.......KNNNN..KNNNK.....',
+  '.......KIIII..KIIIK.....',
+  '......KTTTTT..KTTTTK....',
+  '......KTUUUU..KTUUUUK...',
+  '......KUUUUU..KUUUUUK...',
+  '.......KKKKK...KKKKK....',
+  '........................'
 ];
 
 const FRISK_RIGHT_STEP_A = [
-  '.....HHHHHH.....',
-  '...HHHHHHHHHH...',
-  '..HHHHHHHHHHHH..',
-  '..HHHHHHSSSSHH..',
-  '..HHHHHHSSESHH..',
-  '..DDHHHHSSSSSD..',
-  '...DDHHHSSSSS...',
-  '....BBBBBBBB....',
-  '....BBBBBBBB....',
-  '...BPPPPPPPP....',
-  '..SSBBBBBBBB....',
-  '....PPPPPPPP....',
-  '....BBBBBBBB....',
-  '....NNN..NNN....',
-  '...NNN....NNN...',
-  '...TTT....TTT...'
+  '.......KKKKKKKKKK.......',
+  '.....KKHHHHHHHHHHKK.....',
+  '....KHLLLHHHHHHHHHHK....',
+  '...KHHLLLHHHHHHHHHHHK...',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHHHHHHHHDDDDDDDHHK..',
+  '..KHHHHHHHHDDSSSSSSSDK..',
+  '..KHHHHHHHHHHSSSEESSK...',
+  '..KHHHHHHHHRRSSSSSSSK...',
+  '..KHHHHDDDDSSSSSSSSSK...',
+  '...KKK..KKAAASSSSSKK....',
+  '........KKKKKKKKKK......',
+  '......KBBBBBBBBBBBBK....',
+  '.....KBBBPPPPPPPPBBBK...',
+  '.....KCCCMMMMMMMMBBBK...',
+  '....KSSCCBBBBBBBBBCCK...',
+  '....KAAKBBBBPPPPPPBBK...',
+  '.....KK.KCCCCCCCCCCK....',
+  '........KKKKKKKKKKKK....',
+  '.......KNNNNNNNNNNK.....',
+  '......KNNNNK..KNNNNK....',
+  '.....KNNNNK....KNNNNK...',
+  '.....KIIIIK....KIIIIK...',
+  '....KTTTTTK....KTTTTTK..',
+  '....KTUUUUK....KTUUUUK..',
+  '.....KKKKK......KKKKK...',
+  '........................',
+  '........................'
 ];
 
 const FRISK_RIGHT_STEP_B = [
-  '.....HHHHHH.....',
-  '...HHHHHHHHHH...',
-  '..HHHHHHHHHHHH..',
-  '..HHHHHHSSSSHH..',
-  '..HHHHHHSSESHH..',
-  '..DDHHHHSSSSSD..',
-  '...DDHHHSSSSS...',
-  '....BBBBBBBB....',
-  '....BBBBBBBB....',
-  '....PPPPPPPPB...',
-  '....BBBBBBBBSS..',
-  '....PPPPPPPP....',
-  '....BBBBBBBB....',
-  '.....NNNNNN.....',
-  '....NNN..NNN....',
-  '....TTT..TTT....'
+  '.......KKKKKKKKKK.......',
+  '.....KKHHHHHHHHHHKK.....',
+  '....KHLLLHHHHHHHHHHK....',
+  '...KHHLLLHHHHHHHHHHHK...',
+  '..KHHHHHHHHHHHHHHHHHHK..',
+  '..KHHHHHHHHHDDDDDDDHHK..',
+  '..KHHHHHHHHDDSSSSSSSDK..',
+  '..KHHHHHHHHHHSSSEESSK...',
+  '..KHHHHHHHHRRSSSSSSSK...',
+  '..KHHHHDDDDSSSSSSSSSK...',
+  '...KKK..KKAAASSSSSKK....',
+  '........KKKKKKKKKK......',
+  '......KBBBBBBBBBBBBK....',
+  '.....KBBBPPPPPPPPBBBK...',
+  '.....KBBBMMMMMMMMCCCK...',
+  '.....KCCBBBBBBBBBCCSSK..',
+  '.....KCCBBBBPPPPPPKAAK..',
+  '.....KCCCCCCCCCCCCCKK...',
+  '.....KKKKKKKKKKKKKK.....',
+  '.......KNNNNNNNNNNK.....',
+  '.......KNNNNIINNNNK.....',
+  '.......KNNNK..KNNNK.....',
+  '.......KIIIK..KIIIK.....',
+  '......KTTTTK..KTTTTK....',
+  '......KUUUUK..KUUUUK....',
+  '.......KKKK....KKKK.....',
+  '........................',
+  '........................'
 ];
 
 const FRISK_FRAMES = {
@@ -625,56 +813,109 @@ const FRISK_FRAMES = {
   }
 };
 
-export function drawFriskOverworld(ctx, x, y, dir = 'down', walkFrame = 0, scale = 2.5) {
+export function drawFriskOverworld(ctx, x, y, dir = 'down', walkFrame = 0, scale = 1.9, options = {}) {
+  const {
+    outfit = 'frisk',
+    time = 0,
+    weapon = null,
+    armor = null,
+    sprinting = false
+  } = options || {};
+
   const dirKey = FRISK_FRAMES[dir] ? dir : 'down';
   const stepMod = ((Math.floor(walkFrame) % 4) + 4) % 4;
   const poseKey = stepMod === 1 ? 'stepA' : stepMod === 3 ? 'stepB' : 'idle';
   const grid = FRISK_FRAMES[dirKey][poseKey];
+  const outfitSpec = CHAR_OUTFITS[outfit] || CHAR_OUTFITS.frisk;
 
-  const spr = drawPixelGrid(grid, FRISK_PAL, 2, `frisk-${dirKey}-${poseKey}`);
+  const spr = drawPixelGrid(grid, outfitSpec.pal, 2, `player24-${outfitSpec.id}-${dirKey}-${poseKey}`);
   if (!spr) return;
 
-  const drawW = Math.round(16 * scale);
-  const drawH = Math.round(16 * scale);
-  const bob = stepMod === 1 || stepMod === 3 ? -2 : 0;
+  const drawW = Math.round(24 * scale);
+  const drawH = Math.round(28 * scale);
+  const idleBreath = poseKey === 'idle' && Math.sin(time * 3.2) > 0.55 ? -1 : 0;
+  const strideBob = stepMod === 1 || stepMod === 3 ? -2 : idleBreath;
+  const dx = Math.round(x - drawW / 2);
+  const dy = Math.round(y - drawH + strideBob);
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(spr, Math.round(x - drawW / 2), Math.round(y - drawH + bob), drawW, drawH);
+
+  // Grounded pixel contact shadow beneath boots
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+  ctx.fillRect(Math.round(x - drawW * 0.28), Math.round(y - 3), Math.round(drawW * 0.56), 4);
+  ctx.fillRect(Math.round(x - drawW * 0.2), Math.round(y - 5), Math.round(drawW * 0.4), 2);
+
+  // Subtle sprint/Void equipment pixel aura sparks
+  if (sprinting || weapon === 'Void Blade' || armor === 'Void Cloak') {
+    const auraColor = sprinting ? '#ffef3f' : '#c084fc';
+    const sparkX = Math.round(x + Math.sin(time * 9) * (drawW * 0.34));
+    const sparkY = Math.round(y - drawH * 0.42 - ((time * 18) % 10));
+    ctx.fillStyle = auraColor;
+    ctx.globalAlpha = sprinting ? 0.8 : 0.65;
+    ctx.fillRect(sparkX, sparkY, 2, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.drawImage(spr, dx, dy, drawW, drawH);
+
+  // Tiny golden Locket gleam on chest when wearing Heart Locket / The Locket facing front
+  if ((armor === 'The Locket' || armor === 'Heart Locket+') && dirKey === 'down') {
+    ctx.fillStyle = armor === 'Heart Locket+' ? '#fff9a8' : '#ffef3f';
+    ctx.fillRect(Math.round(x - 2), Math.round(dy + 13.5 * scale), 4, 4);
+  }
+
   ctx.restore();
 }
 
 // ============================================================================
-// 3. SANS OVERWORLD SPRITE (16x16)
+// 3. SANS OVERWORLD SPRITE (24x28 matching high-detail scale)
 // ============================================================================
 
 const SANS_OW_PAL = {
-  K: '#090910',
-  W: '#f4f5fa',
-  L: '#cfd5e6',
-  J: '#2968db',
-  S: '#18449c',
-  P: '#f29bc1',
-  Q: '#c77298'
+  K: '#07070c',
+  W: '#f4f6fc',
+  E: '#ffffff',
+  L: '#cfd6e8',
+  U: '#eef2fc',
+  T: '#aeb9d4',
+  B: '#2668e6',
+  H: '#5290ff',
+  D: '#1542a6',
+  S: '#0c0c14',
+  P: '#ff96c5',
+  Q: '#bd5284'
 };
 
 const SANS_OW_GRID = [
-  '.....KKKKKK.....',
-  '...KKWWWWWWKK...',
-  '..KWWWWWWWWWWK..',
-  '..KWWKKWWKKWWK..',
-  '..KWWWWKKWWWWK..',
-  '..KWWKKKKKKWWK..',
-  '...KKWWWWWWKK...',
-  '..JJLLLLLLLLJJ..',
-  '.JJJJWWWWWWJJJJ.',
-  '.SJJJLLLLLLJJJS.',
-  '.SJJJWWWWWWJJJS.',
-  '..SSKKKKKKKKSS..',
-  '...KKKKKKKKKK...',
-  '...KKK....KKK...',
-  '...WWK....KWW...',
-  '...PPQ....QPP...'
+  '.......KKKKKKKKKK.......',
+  '.....KKWWWWWWWWWWKK.....',
+  '....KWWEEEEEEEEEEWWK....',
+  '...KWWWWWWWWWWWWWWWWK...',
+  '..KWWLWWWWWWWWWWWWLWWK..',
+  '..KWWWWKKKKWWKKKKWWWWK..',
+  '..KWWWKKKKKWWKKKKKWWWK..',
+  '..KWWLLKKKKWWKKKKLLWWK..',
+  '..KWWWWWWWWKKWWWWWWWWK..',
+  '..KLLWWKWWKWWKWWKWWLLK..',
+  '...KKWWKKKKKKKKKKWWKK...',
+  '....KKKKKKKKKKKKKKKK....',
+  '..KKHBBKUUUTTTTUUUKBBHKK',
+  '.KHHBBBKUUWWWWWWUUKBBBHK',
+  '.KBBBBBKULLLLLLLLUKBBBBK',
+  '.KBBBBBKUUWWWWWWUUKBBBBK',
+  '.KBBBBBKTTLLLLLLTTKBBBBK',
+  '.KBBKBBKUUWWWWWWUUKBBKBK',
+  '.KDDKBBKWWWWWWWWWWKBBKDK',
+  '..KKKDDKKKKKKKKKKKKDDKK.',
+  '....KKKSSSSSSSSSSSSKKK..',
+  '....KWWSSSSSSSSSSSSWWK..',
+  '....KKKSSSKK..KKSSSKKK..',
+  '.....KKWWWK....KWWWKK...',
+  '.....KKLLWK....KWLLKK...',
+  '....KPPPPPK....KPPPPPK..',
+  '....KQQQQQK....KQQQQQK..',
+  '.....KKKKK......KKKKK...'
 ];
 
 const SANS_OW_EYE_GLOW_GRID = [
@@ -685,16 +926,20 @@ const SANS_OW_EYE_GLOW_GRID = [
   '..c..'
 ];
 
-export function drawSansOverworld(ctx, x, y, scale = 2.5, glowEye = false) {
-  const spr = drawPixelGrid(SANS_OW_GRID, SANS_OW_PAL, 2, 'sans-ow-v2');
+export function drawSansOverworld(ctx, x, y, scale = 1.95, glowEye = false) {
+  const spr = drawPixelGrid(SANS_OW_GRID, SANS_OW_PAL, 2, 'sans-ow-v3-24');
   if (!spr) return;
-  const drawW = Math.round(16 * scale);
-  const drawH = Math.round(16 * scale);
+  const drawW = Math.round(24 * scale);
+  const drawH = Math.round(28 * scale);
   const dx = Math.round(x - drawW / 2);
   const dy = Math.round(y - drawH);
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.fillRect(Math.round(x - drawW * 0.28), Math.round(y - 3), Math.round(drawW * 0.56), 4);
+
   ctx.drawImage(spr, dx, dy, drawW, drawH);
 
   if (glowEye) {
@@ -705,9 +950,9 @@ export function drawSansOverworld(ctx, x, y, scale = 2.5, glowEye = false) {
       'sans-ow-eye-glow'
     );
     if (eyeSpr) {
-      const ex = Math.round(dx + 9.5 * scale);
-      const ey = Math.round(dy + 3 * scale);
-      const ew = Math.round(5 * scale * 0.65);
+      const ex = Math.round(dx + 14.5 * scale);
+      const ey = Math.round(dy + 6.5 * scale);
+      const ew = Math.round(5 * scale * 0.85);
       ctx.drawImage(eyeSpr, ex - Math.floor(ew / 2), ey - Math.floor(ew / 2), ew, ew);
     }
   }
@@ -2290,10 +2535,55 @@ const PORTRAIT_GRIDS = {
   ]
 };
 
+// 24x24 Sculpted Player STAT / Dialogue Portrait
+const PORTRAIT_PLAYER_BASE = [
+  '......KKKKKKKKKKKK......',
+  '....KKHHHHHHHHHHHHKK....',
+  '...KHLLLHHHHHHHHHHHHK...',
+  '..KHHLLLHHHHHHHHHHHHHK..',
+  '.KHHHHHHHHHHHHHHHHHHHHK.',
+  '.KHHDDDDDDDDDDDDDDDDHHK.',
+  '.KHHDSSSSSSSSSSSSSSDDHK.',
+  '.KHHSSSSEESSSSSSEESSSHK.',
+  '.KHHSSSSEESSSSSSEESSSHK.',
+  '.KHHSSRRSSSSSSSSSSRRSHK.',
+  '.KDDSSSSSSSSSSSSSSSSDDK.',
+  '.KDDSSSSSSSSSSSSSSSSDDK.',
+  '..KKAAASSSSSSSSSSAAAKK..',
+  '....KKAAASSSSSSAAAKK....',
+  '......KKKKKKKKKKKK......',
+  '....KKBBBBBBBBBBBBKK....',
+  '...KBBBBPPPPPPPPBBBBK...',
+  '..KCCBBBMMMMMMMMBBBCCK..',
+  '..KCCBBBBBBBBBBBBBBCCK..',
+  '..KCCBBBPPPPPPPPBBBCCK..',
+  '..KCCBBBMMMMMMMMBBBCCK..',
+  '...KKKKKKKKKKKKKKKKKK...',
+  '........................',
+  '........................'
+];
+
 // Ensure D key in gaster portrait maps cleanly
 const PORTRAIT_PAL_FULL = { ...PORTRAIT_PAL, D: '#161524' };
 
 export function drawDialoguePortrait(ctx, x, y, portraitId = 'sans', talkingFrame = 0) {
+  if (typeof portraitId === 'string' && portraitId.startsWith('player_')) {
+    const outfitId = portraitId.slice('player_'.length);
+    const outfitSpec = CHAR_OUTFITS[outfitId] || CHAR_OUTFITS.frisk;
+    const spr = drawPixelGrid(
+      PORTRAIT_PLAYER_BASE,
+      outfitSpec.pal,
+      3,
+      `portrait-player-${outfitSpec.id}`
+    );
+    if (!spr) return;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(spr, Math.round(x), Math.round(y), 72, 72);
+    ctx.restore();
+    return;
+  }
+
   const pair = PORTRAIT_GRIDS[portraitId] || PORTRAIT_GRIDS.sans;
   const frame = Math.abs(Math.floor(talkingFrame)) % 2;
   const grid = pair[frame];

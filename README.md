@@ -13,8 +13,11 @@ A playable browser-based **Undertale** fan game built with HTML5 Canvas, zero ex
 ## Features
 
 - **Custom 1:1 Pixel-Matrix Art & Dynamic Battle Visuals**
-  - Redesigned high-detail **Sans battle sprite** (`34×26` sculpted cranium with periodic blinking & living gaze tracking, `44×28` fur-hood parka & zipper lapels, `34×18` striped shorts & plush slippers, telekinetic magic slam rings, **phase-tinted rim lighting**, **glowing chest slash embers**, and a **12-segment multi-layer eye flame ribbon**); **6 SOUL Aura Skins**; **W.D. Gaster Unbound** featuring dedicated `GASTER_UNBOUND_CLOAK_GRID` + `GASTER_UNBOUND_SKULL_GRID` matrices, lightning hand tethers, and orbiting arcane runes; beat-synced **Phase 1–5 Battle Backdrops** (Cathedral stained-glass windows, Crimson storm wind streaks & embers, branching Void sky fissures & horizon crystals, Parallax Perspective Void Floor Grid); neon-core bones, spiked bone wheels, Blaster muzzle shockwaves, chamfered beveled battle buttons, **Hitstop**, **SOUL Afterimage Trails**, **Slash Arcs**, and **Chromatic Aberration**.
-- **5 Playable SOUL Modes + Tactical Item Attacks + SOUL Dash & Style Rank**
+  - **Upgraded 24×28 Player Character + 4 Playable Outfits + Sans Overworld Match**: Rebuilt the Overworld protagonist at crisp `24×28` pixel resolution across 4 directional walk cycles with grounded shadows, breathing idle bob, locket chest gleam, sprint sparks, and **4 unlock-free playable styles** (`Frisk (Classic)`, `Chara (Royal)`, `Kris (Dark World)`, `Twilight Vessel`) paired with matching **`72×72` STAT portraits**, a **Fallen Human Name customizer** with Undertale easter-egg reactions in **⚡ Mods** (and **Outfits** at the Echo Sanctum Shrine), Title Screen standoff, and a matching **24×28 Sans Overworld sprite**.
+  - **3-Tone Shaded SOUL & Redesigned Sans Battle Sprite**: Upgraded all SOUL modes with 3-tone specular shading; high-detail **Sans battle sprite** (`34×26` sculpted cranium with periodic blinking & living gaze tracking, `44×28` fur-hood parka & zipper lapels, `34×18` striped shorts & plush slippers, telekinetic magic slam rings, **phase-tinted rim lighting**, **glowing chest slash embers**, and a **12-segment multi-layer eye flame ribbon**); **6 SOUL Aura Skins**; **W.D. Gaster Unbound**; beat-synced **Phase 1–5 Battle Backdrops**; neon-core bones, spiked bone wheels, Blaster muzzle shockwaves, chamfered beveled battle buttons, **Hitstop**, **SOUL Afterimage Trails**, **Slash Arcs**, and **Chromatic Aberration**.
+- **5 Playable SOUL Modes + Combat Upgrades (Perfect Crit, 80% TP Overdrive, Item Attacks & Pause)**
+  - **FIGHT `PERFECT CRIT!` & `SOUL OVERDRIVE` (`[C]` at 80%+ TP)**: Hitting dead-center on the FIGHT bar (`<= 0.11`) triggers **`PERFECT CRIT!`** (`GRAZED!`, `+20% TP`, `-12%` next turn duration, golden spark burst); pressing **`[C]` / `C MENU`** during `DEFEND_ATTACK` with `80%+ TP` unleashes **Dawnbreak Overdrive** (shockwave clearing nearby bones/spears/destructibles, purging KARMA, healing `+12 HP`, granting i-frames).
+  - **Battle Pause & Overworld Sprint**: Press **`P` / `Esc`** mid-attack to Pause/Restart/Return to Title cleanly, and hold **`X` / `Shift`** in Overworld to **Sprint** with golden pixel foot-dust trails.
   - **Red SOUL**: Classic free directional & 360° analog movement.
   - **Blue SOUL**: 4-directional gravity slams (`up`, `down`, `left`, `right`) and moving platforming.
   - **Green SOUL**: Center-locked 4-way shield (with mobile diagonal/analog dominant-axis fallback) deflecting spears (including healing green spears).
@@ -30,8 +33,8 @@ A playable browser-based **Undertale** fan game built with HTML5 Canvas, zero ex
   - **3-Tier Difficulty System** (`Normal | Hard | Nightmare`, defaulting to **Hard** and persisted in `localStorage`) scaling pattern density, charge speeds, projectiles, damage, KARMA, and OST tempo — plus **Low-HP Pulse**, live **Difficulty & SOUL Mode HUD badges**, Gaster Box-Grip Hands, Dynamic Tilted Battle Box, Phase 3+ Button Scrambler, Meta HUD Callouts, and Dynamic Tab Titles.
 - **Expanded Overworld: Echo Sanctum, Void Vault & New Relics**
   - Walk **West** from the Twilight Antechamber to discover **Echo Flower Sanctum** (3 glowing Echo Flowers, **Relic Forge & SOUL Skin Shrine** selling `Empty Gun`, `Void Blade`, `Void Cloak`, `Heart Locket+` + skins), and enter the mysterious grey door to **Entry Seventeen // Void Vault** to claim the **Void Key** unlocking Story Phase 5!
-- **Trophies (14), Challenge Modifiers & Endless Leaderboard**
-  - Unlock 14 persistent trophies (including **Hardcore Survivor** and **Nightmare Sovereign**) in **🏆 Trophies**, customize **6 SOUL Skins**, toggle **Challenge Modifiers** (`Ironman 1-HP`, `Hyper Speed 1.35x`, `Inverted Gravity`, `Mirror Horizon`), and climb the **Local Top-5 Endless Leaderboard** in **⚡ Mods**.
+- **Trophies (16), Human Name/Outfits, Challenge Modifiers & Endless Leaderboard**
+  - Unlock 16 persistent trophies (including **Perfect Striker**, **Dawnbreaker**, **Hardcore Survivor**, and **Nightmare Sovereign**) in **🏆 Trophies**, customize your **Fallen Human Name**, **4 Outfits**, **6 SOUL Skins**, toggle **Challenge Modifiers** (`Ironman 1-HP`, `Hyper Speed 1.35x`, `Inverted Gravity`, `Mirror Horizon`), and climb the **Local Top-5 Endless Leaderboard** in **⚡ Mods**.
 - **Full Mobile Handheld Edition: Game Boy Portrait & Switch Landscape Grips**
   - **Portrait (`<= 780px`)**: **Nintendo Game Boy Chassis** with charcoal screen bezel & glowing red power LED, sculpted slide-touch **Precision Cross D-Pad**, staggered circular `B`/`A` domes, tilted `SELECT`/`START` rubber pills, and speaker grille.
   - **Landscape (`<= 540px` height)**: **Full-Height 3-Column Switch Handheld** with rounded left & right Joy-Con grips framing a full-height 4:3 battlefield, defaulting to the sculpted slide-touch **Precision Cross D-Pad** with a 1-tap toggle to a **Full-Grip Floating Dynamic Thumbstick** featuring `±26°` cardinal snap and pointer capture across all buttons.
@@ -44,8 +47,9 @@ A playable browser-based **Undertale** fan game built with HTML5 Canvas, zero ex
 | :--- | :--- |
 | **Move / Switch Web Rail / Shield** | `Arrow Keys`, `WASD`, Precision Cross D-Pad, or Floating Dynamic Thumbstick |
 | **Confirm / Shoot / Charge Shot** | `Z` / `Enter` (Hold in Yellow SOUL for Big Shot) or `A` / `START` Touch Button |
-| **SOUL Dash (i-Frames) / Cancel** | `X` / `Shift` or `B` Touch Button |
-| **Field Menu / Toggle Practice Speed** | `C` / `Esc` or `SELECT` / `C MENU` Touch Button |
+| **SOUL Dash (i-Frames) / Overworld Sprint / Cancel** | `X` / `Shift` or `B` Touch Button |
+| **Field Menu / SOUL Overdrive (80% TP) / Practice Speed** | `C` or `SELECT` / `C MENU` Touch Button |
+| **Pause Battle (during Defend)** | `P` / `Esc` |
 | **Practice Select Page** | `Q` / `E` or `PageUp` / `PageDown` |
 | **Mute Audio** | `M` |
 

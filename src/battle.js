@@ -75,7 +75,9 @@ export const ACHIEVEMENT_DEFS = [
   { id: 'Void Sovereign', title: 'Void Sovereign', desc: 'Defeat Secret Phase 5 Boss W.D. Gaster Unbound.' },
   { id: 'Ironman Legend', title: 'Ironman Legend', desc: 'Survive 3 turns or clear an attack with 1-HP Ironman active.' },
   { id: 'Hardcore Survivor', title: 'Hardcore Survivor', desc: 'Clear any Story or Boss Rush run on HARD or NIGHTMARE.' },
-  { id: 'Nightmare Sovereign', title: 'Nightmare Sovereign', desc: 'Triumph on NIGHTMARE difficulty without lowering the bar.' }
+  { id: 'Nightmare Sovereign', title: 'Nightmare Sovereign', desc: 'Triumph on NIGHTMARE difficulty without lowering the bar.' },
+  { id: 'Perfect Striker', title: 'Perfect Striker', desc: 'Nail a dead-center PERFECT CRIT on the FIGHT target bar.' },
+  { id: 'Dawnbreaker', title: 'Dawnbreaker', desc: 'Unleash a SOUL OVERDRIVE shockwave at 80%+ TP during combat.' }
 ];
 
 const FLAVOR_TEXTS = {
@@ -579,6 +581,9 @@ export class BattleEngine {
     this.screenShake = 0;
     this.phaseBannerTimer = 0;
     this.phaseBannerText = '';
+    this.overdriveWave = null;
+    this.paused = false;
+    this.pauseChoice = 0;
 
     // Track BGM
     const bgmMap = { 1: 'phase1', 2: 'phase2', 3: 'phase3', 4: 'phase4', 5: 'phase5' };
@@ -742,7 +747,111 @@ export class BattleEngine {
     audio.stopBGM();
   }
 
+  _restartCurrentMode() {
+    const shared = {
+      name: this.stats.name,
+      maxHp: this.stats.maxHp,
+      weapon: this.weaponName,
+      armor: this.armorName,
+      customSpeedMult: this.customSpeedMult,
+      difficulty: this.difficulty,
+      modifiers: { ...this.modifiers },
+      soulSkin: this.soulSkin,
+      hasVoidKey: this.hasVoidKey
+    };
+    if (this.practiceAttackIndex !== null) {
+      this.resetBattle({ ...shared, practiceAttackIndex: this.practiceAttackIndex });
+    } else if (this.endlessMode) {
+      this.resetBattle({ ...shared, endless: true, phase: this.endlessStartPhase });
+    } else if (this.bossRushMode) {
+      this.resetBattle({ ...shared, bossRush: true });
+    } else {
+      this.resetBattle({ ...shared, phase: this.phase });
+    }
+  }
+
+  _triggerSoulOverdrive() {
+    this.tp = Math.max(0, this.tp - 80);
+    const sx = this.soul.x;
+    const sy = this.soul.y;
+
+    for (const b of this.runner.bones) {
+      if (b.collected || b.color === 'green') continue;
+      const cx = Math.max(b.x, Math.min(sx, b.x + b.w));
+      const cy = Math.max(b.y, Math.min(sy, b.y + b.h));
+      if (Math.hypot(sx - cx, sy - cy) < 120) {
+        b.collected = true;
+      }
+    }
+    if (this.runner.spears?.length) {
+      for (let i = this.runner.spears.length - 1; i >= 0; i--) {
+        const sp = this.runner.spears[i];
+        if (Math.hypot((sp.x || 0) - sx, (sp.y || 0) - sy) < 120) {
+          this.runner.spears.splice(i, 1);
+        }
+      }
+    }
+    if (this.runner.destructibles?.length) {
+      for (let i = this.runner.destructibles.length - 1; i >= 0; i--) {
+        const d = this.runner.destructibles[i];
+        const cx = Math.max(d.x, Math.min(sx, d.x + d.w));
+        const cy = Math.max(d.y, Math.min(sy, d.y + d.h));
+        if (Math.hypot(sx - cx, sy - cy) < 130) {
+          this.runner.destructibles.splice(i, 1);
+          this.runner.targetsBroken += 1;
+        }
+      }
+    }
+
+    this.stats.kr = 0;
+    this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + 12);
+    this.invulnTimer = Math.max(this.invulnTimer, 0.55);
+    this.hitstopTimer = 0.05;
+    this.chromaticTimer = 0.25;
+    this.addScreenShake(7);
+    this.styleScore += 300;
+    this._refreshStyleRank();
+    this.overdriveWave = { x: sx, y: sy, timer: 0.45, maxTimer: 0.45 };
+    this._spawnParticles(sx, sy, '#ffef3f', 12, 175);
+    this._spawnParticles(sx, sy, '#2ce8f5', 8, 150);
+    audio.overdriveBurst?.();
+    this.addPopup(sx, sy - 22, 'DAWNBREAK OVERDRIVE!', '#ffef3f');
+    this.unlockAchievement('Dawnbreaker');
+  }
+
   update(dt, input) {
+    if (this.state === 'DEFEND_ATTACK') {
+      if (this.paused) {
+        if (input.justPressed('ArrowUp') || input.justPressed('KeyW')) {
+          this.pauseChoice = (this.pauseChoice + 2) % 3;
+          audio.menuMove();
+        } else if (input.justPressed('ArrowDown') || input.justPressed('KeyS')) {
+          this.pauseChoice = (this.pauseChoice + 1) % 3;
+          audio.menuMove();
+        } else if (input.justPressed('KeyP') || input.justPressed('Escape')) {
+          this.paused = false;
+          audio.menuMove();
+        } else if (input.justPressed('KeyZ') || input.justPressed('Enter')) {
+          audio.menuSelect();
+          if (this.pauseChoice === 0) {
+            this.paused = false;
+          } else if (this.pauseChoice === 1) {
+            this._restartCurrentMode();
+          } else {
+            this.paused = false;
+            this.onReturnTitle();
+          }
+        }
+        return;
+      }
+      if (input.justPressed('KeyP') || input.justPressed('Escape')) {
+        this.paused = true;
+        this.pauseChoice = 0;
+        audio.menuMove();
+        return;
+      }
+    }
+
     if (this.hitstopTimer > 0) {
       this.hitstopTimer = Math.max(0, this.hitstopTimer - dt);
       return;
@@ -753,6 +862,12 @@ export class BattleEngine {
       dt = dt * 0.58;
     }
     this.time += dt;
+    if (this.overdriveWave) {
+      this.overdriveWave.timer -= rawDt;
+      if (this.overdriveWave.timer <= 0) {
+        this.overdriveWave = null;
+      }
+    }
 
     if (this.chromaticTimer > 0) {
       this.chromaticTimer = Math.max(0, this.chromaticTimer - rawDt);
@@ -1125,12 +1240,32 @@ export class BattleEngine {
           audio.hit();
         }
       } else {
+        const isPerfectCrit = Math.abs(this.fightBar.pos) <= 0.11;
         this.sans.dodgeTimer = 0.55;
-        this.sans.expression = 'wink';
         this.sans.pose = 'shrug';
-        this.fightBar.damageText = 'MISS';
-        this.fightBar.showMiss = true;
-        this.fightBar.damageTimer = 0.9;
+        if (isPerfectCrit) {
+          this.sans.expression = 'tired';
+          this.sans.sweat = true;
+          this.sans.hurtShake = 10;
+          this.sans.flashAlpha = 0.55;
+          this.tp = Math.min(100, this.tp + 20);
+          this.styleScore += 250;
+          this._refreshStyleRank();
+          this.itemDurationMult = Math.min(this.itemDurationMult, 0.88);
+          this.hitstopTimer = 0.045;
+          this._spawnParticles(this.sans.x, this.sans.y - 54, '#ffef3f', 14, 155);
+          audio.critSlash?.();
+          this.fightBar.damageText = 'GRAZED!';
+          this.fightBar.showMiss = true;
+          this.fightBar.damageTimer = 1.05;
+          this.addPopup(this.sans.x, this.sans.y - 84, 'PERFECT CRIT! +20% TP', '#ffef3f');
+          this.unlockAchievement('Perfect Striker');
+        } else {
+          this.sans.expression = 'wink';
+          this.fightBar.damageText = 'MISS';
+          this.fightBar.showMiss = true;
+          this.fightBar.damageTimer = 0.9;
+        }
       }
     } else {
       this.fightBar.damageText = 'MISS';
@@ -1752,6 +1887,11 @@ export class BattleEngine {
 
     this.runner.update(dt, this);
     if (this.state !== 'DEFEND_ATTACK') return;
+
+    // 80%+ TP SOUL OVERDRIVE shockwave burst on [C]
+    if (this.tp >= 80 && input.justPressed('KeyC')) {
+      this._triggerSoulOverdrive();
+    }
 
     if (this.runner.gasterActive) {
       this.sawGasterThisTurn = true;
@@ -2413,39 +2553,7 @@ export class BattleEngine {
       } else if (input.justPressed('KeyZ') || input.justPressed('Enter')) {
         audio.menuSelect();
         if (go.choiceIdx === 0) {
-          const shared = {
-            name: this.stats.name,
-            maxHp: this.stats.maxHp,
-            weapon: this.weaponName,
-            armor: this.armorName,
-            customSpeedMult: this.customSpeedMult,
-            difficulty: this.difficulty,
-            modifiers: { ...this.modifiers },
-            soulSkin: this.soulSkin,
-            hasVoidKey: this.hasVoidKey
-          };
-          if (this.practiceAttackIndex !== null) {
-            this.resetBattle({
-              ...shared,
-              practiceAttackIndex: this.practiceAttackIndex
-            });
-          } else if (this.endlessMode) {
-            this.resetBattle({
-              ...shared,
-              endless: true,
-              phase: this.endlessStartPhase
-            });
-          } else if (this.bossRushMode) {
-            this.resetBattle({
-              ...shared,
-              bossRush: true
-            });
-          } else {
-            this.resetBattle({
-              ...shared,
-              phase: this.phase
-            });
-          }
+          this._restartCurrentMode();
         } else if (this.practiceAttackIndex !== null) {
           this.onOpenAttackSelect();
         } else if (this.endlessMode || this.bossRushMode) {
@@ -2707,12 +2815,17 @@ export class BattleEngine {
       ctx.restore();
     }
 
-    // MISS or 9999999 Damage Popup
+    // MISS, GRAZED!, or 9999999 Damage Popup
     if (this.fightBar.showMiss) {
       ctx.save();
       ctx.font = 'bold 24px "Press Start 2P", monospace';
       ctx.textAlign = 'center';
-      ctx.fillStyle = this.fightBar.damageText === 'MISS' ? '#d4d4e0' : '#ff2a2a';
+      ctx.fillStyle =
+        this.fightBar.damageText === 'MISS'
+          ? '#d4d4e0'
+          : this.fightBar.damageText === 'GRAZED!'
+            ? '#ffef3f'
+            : '#ff2a2a';
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 5;
       const popY = 92 - (1.0 - Math.min(1, this.fightBar.damageTimer)) * 18;
@@ -2818,6 +2931,22 @@ export class BattleEngine {
         ctx.globalAlpha = 0.65 + 0.25 * Math.sin(this.time * 8);
         ctx.beginPath();
         ctx.arc(this.soul.x, this.soul.y, 15, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (this.overdriveWave) {
+        const op = 1 - Math.max(0, this.overdriveWave.timer / this.overdriveWave.maxTimer);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 1 - op);
+        ctx.strokeStyle = '#ffef3f';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(this.overdriveWave.x, this.overdriveWave.y, 14 + op * 110, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = '#2ce8f5';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.overdriveWave.x, this.overdriveWave.y, 8 + op * 82, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
@@ -2933,9 +3062,55 @@ export class BattleEngine {
       ctx.restore();
     }
 
+    // Battle Pause Overlay
+    if (this.paused && this.state === 'DEFEND_ATTACK') {
+      this._renderPauseOverlay(ctx);
+    }
+
     // Achievement Toast Notification (top-right)
     this._renderAchievementToast(ctx);
 
+    ctx.restore();
+  }
+
+  _renderPauseOverlay(ctx) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(4, 4, 10, 0.78)';
+    ctx.fillRect(0, 0, 640, 480);
+
+    const pw = 296;
+    const ph = 186;
+    const px = 320 - pw / 2;
+    const py = 148;
+    ctx.fillStyle = '#07070f';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.strokeStyle = '#2ce8f5';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(px, py, pw, ph);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffef3f';
+    ctx.font = '15px "Press Start 2P", monospace';
+    ctx.fillText('PAUSED', 320, py + 34);
+
+    const opts = ['Resume Battle', 'Restart Battle', 'Return to Title'];
+    ctx.textAlign = 'left';
+    ctx.font = '11px "Press Start 2P", monospace';
+    opts.forEach((lbl, i) => {
+      const oy = py + 76 + i * 32;
+      if (this.pauseChoice === i) {
+        drawSoul(ctx, px + 42, oy - 5, 'red', { scale: 0.85 });
+        ctx.fillStyle = '#ffef3f';
+      } else {
+        ctx.fillStyle = '#ffffff';
+      }
+      ctx.fillText(lbl, px + 62, oy);
+    });
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText('[P] / [Esc]: Resume   [Z]: Confirm', 320, py + ph - 14);
     ctx.restore();
   }
 
@@ -2980,9 +3155,14 @@ export class BattleEngine {
     ctx.fillStyle = this.soul.grazeFlashTimer > 0 ? '#ffffff' : '#ffa024';
     ctx.fillText('TP', barX + barW / 2, barY - 8);
 
+    const tpUltReady = this.tp >= 80 && this.state === 'DEFEND_ATTACK';
     ctx.fillStyle = '#090910';
     ctx.fillRect(barX, barY, barW, barH);
-    ctx.strokeStyle = this.soul.grazeFlashTimer > 0 ? '#ffef3f' : '#ffffff';
+    ctx.strokeStyle = tpUltReady && Math.floor(this.time * 8) % 2 === 0
+      ? '#ffef3f'
+      : this.soul.grazeFlashTimer > 0
+        ? '#ffef3f'
+        : '#ffffff';
     ctx.lineWidth = 2;
     ctx.strokeRect(barX, barY, barW, barH);
 
@@ -2999,6 +3179,11 @@ export class BattleEngine {
     ctx.font = '8px "Press Start 2P", monospace';
     ctx.fillStyle = this.tp >= 60 ? '#ffef3f' : '#f5f5f8';
     ctx.fillText(`${Math.floor(this.tp)}%`, barX + barW / 2, barY + barH + 14);
+    if (tpUltReady) {
+      ctx.fillStyle = Math.floor(this.time * 10) % 2 === 0 ? '#2ce8f5' : '#ffef3f';
+      ctx.font = '7px "Press Start 2P", monospace';
+      ctx.fillText('[C]ULT', barX + barW / 2, barY + barH + 26);
+    }
     ctx.restore();
   }
 
@@ -3265,6 +3450,12 @@ export class BattleEngine {
 
     // Target ellipse oval grid
     ctx.save();
+    ctx.fillStyle = 'rgba(255, 239, 63, 0.14)';
+    ctx.fillRect(cx - 26, this.box.y + 14, 52, this.box.h - 28);
+    ctx.strokeStyle = 'rgba(255, 239, 63, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - 26, this.box.y + 14, 52, this.box.h - 28);
+
     ctx.strokeStyle = '#48b848';
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -3277,6 +3468,11 @@ export class BattleEngine {
     ctx.moveTo(cx, this.box.y + 16);
     ctx.lineTo(cx, this.box.y + this.box.h - 16);
     ctx.stroke();
+
+    ctx.fillStyle = '#ffef3f';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('CRIT', cx, this.box.y + 24);
 
     // Moving strike bar
     const barX = cx + this.fightBar.pos * 240;
@@ -3680,6 +3876,16 @@ export class BattleEngine {
   }
 
   handlePointerMove(x, y) {
+    if (this.paused && this.state === 'DEFEND_ATTACK') {
+      if (x >= 180 && x <= 460 && y >= 204 && y <= 304) {
+        const idx = Math.floor((y - 208) / 32);
+        if (idx >= 0 && idx < 3 && this.pauseChoice !== idx) {
+          this.pauseChoice = idx;
+          audio.menuMove();
+        }
+      }
+      return;
+    }
     if (this.state === 'PLAYER_MENU') {
       if (y >= BUTTON_Y && y <= BUTTON_Y + 42) {
         for (let i = 0; i < BUTTON_XS.length; i++) {
@@ -3747,6 +3953,15 @@ export class BattleEngine {
       else input.triggerPress(code);
     };
     this.handlePointerMove(x, y);
+    if (this.paused && this.state === 'DEFEND_ATTACK') {
+      if (x >= 180 && x <= 460 && y >= 204 && y <= 304) {
+        fireKey('KeyZ');
+      } else {
+        this.paused = false;
+        audio.menuMove();
+      }
+      return;
+    }
     if (this.state === 'PLAYER_MENU') {
       if (y >= BUTTON_Y && y <= BUTTON_Y + 42) {
         for (let i = 0; i < BUTTON_XS.length; i++) {

@@ -4,7 +4,7 @@ import { ATTACK_META } from './attacks.js';
 import { TRACK_CATALOG, audio } from './audio.js';
 import { ACHIEVEMENT_DEFS, BattleEngine, DIFFICULTIES } from './battle.js';
 import { OverworldEngine } from './overworld.js';
-import { SOUL_SKINS, drawSansBattle, drawSoul } from './sprites.js';
+import { CHAR_OUTFITS, SOUL_SKINS, drawFriskOverworld, drawSansBattle, drawSoul } from './sprites.js';
 
 const MODIFIERS_STORAGE_KEY = 'undertale_last_night_modifiers_v1';
 
@@ -245,10 +245,20 @@ export class UndertaleLastNightGame {
     if (useSave && this.overworld.loadSaveData()) {
       this.overworld.enterRoom(this.overworld.roomId || 'antechamber', 320, 380);
     } else {
+      const keepName = this.overworld?.stats?.name || 'FRISK';
+      const keepOutfit = this.overworld?.charOutfit || 'frisk';
+      const keepSkin = this.overworld?.soulSkin || 'classic';
+      const keepUnlockedSkins = this.overworld?.unlockedSkins
+        ? new Set(this.overworld.unlockedSkins)
+        : new Set(['classic', 'void_prism', 'golden_dawn']);
       this.overworld = new OverworldEngine({
         onTriggerBattle: () => this.startBattleFromOverworld(),
         onReturnTitle: () => this.returnToTitle()
       });
+      this.overworld.stats.name = keepName;
+      this.overworld.charOutfit = keepOutfit;
+      this.overworld.soulSkin = keepSkin;
+      this.overworld.unlockedSkins = keepUnlockedSkins;
       this.overworld.enterRoom('antechamber', 120, 362);
       this.overworld.startDialogue([
         '* Long ago, a timeline stalled on the threshold of morning.',
@@ -283,6 +293,7 @@ export class UndertaleLastNightGame {
     this.battle.assistMode = this.assistEnabled;
     this.battle.resetBattle({
       phase,
+      name: this.overworld.stats.name,
       weapon: this.overworld.stats.weapon,
       armor: this.overworld.stats.armor,
       soulSkin: this.overworld.soulSkin,
@@ -298,6 +309,7 @@ export class UndertaleLastNightGame {
     this.battle.assistMode = this.assistEnabled;
     this.battle.resetBattle({
       practiceAttackIndex: index,
+      name: this.overworld.stats.name,
       weapon: this.overworld.stats.weapon,
       armor: this.overworld.stats.armor,
       soulSkin: this.overworld.soulSkin,
@@ -313,6 +325,7 @@ export class UndertaleLastNightGame {
     this.battle.resetBattle({
       endless: true,
       phase: 4,
+      name: this.overworld.stats.name,
       weapon: this.overworld.stats.weapon,
       armor: this.overworld.stats.armor,
       soulSkin: this.overworld.soulSkin,
@@ -328,6 +341,7 @@ export class UndertaleLastNightGame {
     this.battle.resetBattle({
       bossRush: true,
       phase: 1,
+      name: this.overworld.stats.name,
       weapon: this.overworld.stats.weapon,
       armor: this.overworld.stats.armor,
       soulSkin: this.overworld.soulSkin,
@@ -630,11 +644,18 @@ export class UndertaleLastNightGame {
       ctx.restore();
     }
 
-    drawSansBattle(ctx, 108, 370, {
+    drawSansBattle(ctx, 126, 360, {
       time: this.time,
       expression: 'blueEye',
       pose: 'pockets',
       phase: 2
+    });
+
+    drawFriskOverworld(ctx, 58, 432, 'right', 0, 1.75, {
+      outfit: this.overworld.charOutfit,
+      time: this.time,
+      weapon: this.overworld.stats.weapon,
+      armor: this.overworld.stats.armor
     });
 
     const opts = this.getTitleOptions();
@@ -980,15 +1001,15 @@ export class UndertaleLastNightGame {
     ctx.font = '9px "Press Start 2P", monospace';
     const rows = [
       { c: '#ffffff', t: 'MOVE / SHIELD: Arrow Keys / WASD / Handheld Stick' },
-      { c: '#ffffff', t: 'CONFIRM / FIRE:[Z] or Enter (Hold [Z] in Yellow = BIG SHOT!)' },
-      { c: '#2ce8f5', t: 'SOUL DASH:     Press [X] or [Shift] in combat -> i-frame burst!' },
+      { c: '#ffef3f', t: 'CONFIRM / CRIT:[Z] Center FIGHT bar = PERFECT CRIT (+20% TP)!' },
+      { c: '#2ce8f5', t: 'DASH / SPRINT: Hold [X]/[Shift] in Hall to sprint; tap in battle!' },
+      { c: '#ffef3f', t: 'OVERDRIVE (80%): Press [C] during defense -> Shockwave + +12 HP!' },
+      { c: '#94a3b8', t: 'PAUSE BATTLE:  Press [P] or [Esc] mid-attack to pause / retry' },
       { c: '#2ce8f5', t: 'BLUE BONES:    Freeze still! (Blue SOUL jumps)' },
       { c: '#ffa024', t: 'ORANGE / TP:   Keep moving! Close-call graze triggers slow-mo!' },
       { c: '#4ade80', t: 'GREEN SOUL:    Point shield at incoming spears (+TP)' },
-      { c: '#facc15', t: 'YELLOW SOUL:   Tap or Hold [Z] to break barriers & bones' },
-      { c: '#e879f9', t: 'PURPLE SOUL:   Up/Down switches between 3 glowing web rails!' },
-      { c: '#c084fc', t: 'ECHO SANCTUM:  Walk West from Antechamber for Void Key + Skins' },
-      { c: '#ffef3f', t: 'SECRET PH 5:   Bring Void Key past Phase 4 -> Gaster Unbound!' }
+      { c: '#e879f9', t: 'PURPLE / YEL:  Up/Down switches 3 web rails; Hold [Z] = BIG SHOT' },
+      { c: '#c084fc', t: 'ECHO SANCTUM:  Walk West for Void Key -> Secret Phase 5!' }
     ];
 
     rows.forEach((r, idx) => {
@@ -1069,6 +1090,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
           }
         }
       }
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (preventKeys.has(e.code)) e.preventDefault();
       ensureTitleMusic();
       if (e.code === 'KeyM') {
@@ -1466,15 +1489,68 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       if (lblTempo) lblTempo.textContent = `${m.toFixed(2)}x`;
     });
 
-    // Challenge Modifiers, SOUL Skins & Endless Leaderboard Modal
+    // Challenge Modifiers, Human Name, Outfits, SOUL Skins & Endless Leaderboard Modal
     const modModal = document.getElementById('modifiersModal');
     const btnModifiers = document.getElementById('btnModifiers');
     const btnCloseModifiers = document.getElementById('btnCloseModifiers');
     const modGrid = document.getElementById('modifiersGrid');
+    const outfitsGrid = document.getElementById('outfitsGrid');
     const skinsGrid = document.getElementById('skinsGrid');
     const lbList = document.getElementById('leaderboardList');
+    const inpPlayerName = document.getElementById('inpPlayerName');
+    const btnSavePlayerName = document.getElementById('btnSavePlayerName');
+    const nameReaction = document.getElementById('nameReaction');
+
+    const NAME_REACTIONS = {
+      FRISK: 'Hard mode ready. Stay determined!',
+      CHARA: 'The true name resonates...',
+      SANS: 'nope. get your own name, pal.',
+      GASTER: 'DARKER, YET DARKER...',
+      PAPYRUS: 'I APPROVE OF THIS NAME!! NYEH HEH HEH!',
+      KRIS: 'A light shines in the dark.'
+    };
+
+    const applyPlayerName = () => {
+      if (!inpPlayerName) return;
+      const clean = inpPlayerName.value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 10) || 'FRISK';
+      inpPlayerName.value = clean;
+      game.overworld.stats.name = clean;
+      game.battle.stats.name = clean;
+      game.overworld.writeSaveData();
+      audio.save();
+      if (nameReaction) {
+        nameReaction.textContent = NAME_REACTIONS[clean] || `Named "${clean}"!`;
+      }
+    };
+    btnSavePlayerName?.addEventListener('click', applyPlayerName);
+    inpPlayerName?.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') applyPlayerName();
+    });
 
     const renderModifiersModal = () => {
+      if (inpPlayerName) {
+        inpPlayerName.value = game.overworld.stats.name || 'FRISK';
+        if (nameReaction) {
+          nameReaction.textContent = NAME_REACTIONS[inpPlayerName.value] || '';
+        }
+      }
+      if (outfitsGrid) {
+        outfitsGrid.innerHTML = '';
+        for (const o of Object.values(CHAR_OUTFITS)) {
+          const selected = game.overworld.charOutfit === o.id;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `skin-card${selected ? ' selected' : ''}`;
+          btn.innerHTML = `<div class="skin-title" style="color:${o.badgeColor}">${selected ? '★ ' : ''}${o.name}</div><div class="skin-desc">${o.desc}</div>`;
+          btn.addEventListener('click', () => {
+            game.overworld.charOutfit = o.id;
+            game.overworld.writeSaveData();
+            audio.menuSelect();
+            renderModifiersModal();
+          });
+          outfitsGrid.appendChild(btn);
+        }
+      }
       if (modGrid) {
         modGrid.innerHTML = '';
         const defs = [

@@ -875,6 +875,34 @@ body {
   margin-top: 4px;
 }
 
+.name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.name-input {
+  width: 148px;
+  padding: 6px 10px;
+  background: #0b0b15;
+  color: var(--accent);
+  border: 2px solid #484866;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.name-input:focus {
+  border-color: var(--cyan);
+}
+
+.name-reaction {
+  font-size: 17px;
+  color: var(--cyan);
+}
+
 .leaderboard-list {
   display: flex;
   flex-direction: column;

@@ -2,6 +2,7 @@
 
 import { audio } from './audio.js';
 import {
+  CHAR_OUTFITS,
   SOUL_SKINS,
   drawChest,
   drawDialoguePortrait,
@@ -151,7 +152,8 @@ export class OverworldEngine {
       dir: 'right',
       walkTimer: 0,
       walkFrame: 0,
-      speed: 148
+      speed: 148,
+      sprinting: false
     };
 
     this.stats = {
@@ -175,6 +177,8 @@ export class OverworldEngine {
     this.sansVisibleInCorridor = true;
     this.hasVoidKey = false;
     this.soulSkin = 'classic';
+    this.charOutfit = 'frisk';
+    this.footDust = [];
     this.ownedRelics = new Set([
       'Real Knife',
       'Burnt Pan',
@@ -221,6 +225,11 @@ export class OverworldEngine {
         this.stats.armor = data.armor;
         this.stats.df = ARMORS[data.armor].df;
       }
+      if (data.name && typeof data.name === 'string') {
+        const clean = data.name.trim().toUpperCase().slice(0, 10);
+        if (clean) this.stats.name = clean;
+      }
+      if (data.charOutfit && CHAR_OUTFITS[data.charOutfit]) this.charOutfit = data.charOutfit;
       if (typeof data.battleCleared === 'boolean') this.battleCleared = data.battleCleared;
       if (data.lastEnding) this.lastEnding = data.lastEnding;
       if (data.lastRank) this.lastRank = data.lastRank;
@@ -244,6 +253,7 @@ export class OverworldEngine {
     try {
       const payload = {
         roomId: this.roomId,
+        name: this.stats.name,
         hp: this.stats.hp,
         inventory: this.inventory,
         weapon: this.stats.weapon,
@@ -251,6 +261,7 @@ export class OverworldEngine {
         gold: this.stats.gold,
         hasVoidKey: this.hasVoidKey,
         soulSkin: this.soulSkin,
+        charOutfit: this.charOutfit,
         ownedRelics: Array.from(this.ownedRelics),
         unlockedSkins: Array.from(this.unlockedSkins),
         battleCleared: this.battleCleared,
@@ -362,7 +373,7 @@ export class OverworldEngine {
       return;
     }
 
-    // 4. Player Movement
+    // 4. Player Movement (Hold X / Shift to Sprint)
     let dx = 0;
     let dy = 0;
     if (input.isDown('ArrowLeft') || input.isDown('KeyA')) dx -= 1;
@@ -375,18 +386,36 @@ export class OverworldEngine {
       dy *= 0.7071;
     }
 
+    for (let i = this.footDust.length - 1; i >= 0; i--) {
+      const fd = this.footDust[i];
+      fd.y -= 10 * dt;
+      fd.life -= dt;
+      if (fd.life <= 0) this.footDust.splice(i, 1);
+    }
+
+    const sprinting = Boolean(
+      (dx !== 0 || dy !== 0) &&
+        (input.isDown('KeyX') || input.isDown('ShiftLeft') || input.isDown('ShiftRight'))
+    );
+    this.player.sprinting = sprinting;
+    const moveSpd = sprinting ? 228 : this.player.speed;
+
     if (dx !== 0 || dy !== 0) {
       if (Math.abs(dx) >= Math.abs(dy)) {
         this.player.dir = dx < 0 ? 'left' : 'right';
       } else {
         this.player.dir = dy < 0 ? 'up' : 'down';
       }
-      this.player.x += dx * this.player.speed * dt;
-      this.player.y += dy * this.player.speed * dt;
+      this.player.x += dx * moveSpd * dt;
+      this.player.y += dy * moveSpd * dt;
       this.player.walkTimer += dt;
-      if (this.player.walkTimer >= 0.14) {
+      const stepDur = sprinting ? 0.095 : 0.14;
+      if (this.player.walkTimer >= stepDur) {
         this.player.walkTimer = 0;
         this.player.walkFrame = (this.player.walkFrame + 1) % 4;
+        if (sprinting && this.player.walkFrame % 2 === 1) {
+          this.footDust.push({ x: this.player.x, y: this.player.y - 2, life: 0.28, maxLife: 0.28 });
+        }
       }
     } else {
       this.player.walkFrame = 0;
@@ -505,14 +534,48 @@ export class OverworldEngine {
   }
 
   _openShrineShop() {
+    const outfitSpec = CHAR_OUTFITS[this.charOutfit] || CHAR_OUTFITS.frisk;
     this.startDialogue([
       {
         speaker: 'narrator',
-        text: `* Sanctum Shrine — Your Gold: ${this.stats.gold}G | Skin: ${SOUL_SKINS[this.soulSkin]?.name || 'Classic Soul'}\n* Acquire hidden Void Relics & SOUL Auras?`,
-        choices: ['Relic Forge', 'SOUL Skins', 'Leave'],
+        text: `* Sanctum Shrine — Gold: ${this.stats.gold}G | Skin: ${SOUL_SKINS[this.soulSkin]?.name || 'Classic'} | Outfit: ${outfitSpec.name}`,
+        choices: ['Relic Forge', 'SOUL Skins', 'Outfits', 'Leave'],
         onChoice: (idx) => {
           if (idx === 0) this._openRelicShopMenu();
           else if (idx === 1) this._openSkinMenu();
+          else if (idx === 2) this._openOutfitMenu();
+        }
+      }
+    ]);
+  }
+
+  _openOutfitMenu() {
+    const outfits = Object.values(CHAR_OUTFITS);
+    const choices = outfits.map((o) =>
+      this.charOutfit === o.id ? `${o.name.split(' ')[0]} [ON]` : o.name.split(' ')[0]
+    );
+    this.startDialogue([
+      {
+        speaker: 'narrator',
+        text: `* Select Character Outfit (Current: ${(CHAR_OUTFITS[this.charOutfit] || CHAR_OUTFITS.frisk).name}):`,
+        choices: [...choices, 'Back'],
+        onChoice: (idx) => {
+          if (idx >= outfits.length) {
+            this._openShrineShop();
+            return;
+          }
+          const chosen = outfits[idx];
+          this.charOutfit = chosen.id;
+          this.writeSaveData();
+          audio.save();
+          this.startDialogue([
+            {
+              speaker: 'player',
+              portrait: `player_${chosen.id}`,
+              voice: 'narrator',
+              text: `* Changed appearance to ${chosen.name}!\n* ${chosen.desc}`
+            }
+          ]);
         }
       }
     ]);
@@ -1039,6 +1102,22 @@ export class OverworldEngine {
     }
   }
 
+  _drawPlayerSprite(ctx, sx, y) {
+    for (const fd of this.footDust) {
+      const a = Math.max(0, Math.min(1, fd.life / (fd.maxLife || 0.28)));
+      const fx = this.roomId === 'corridor' ? fd.x - this.getCameraX() : fd.x;
+      ctx.fillStyle = `rgba(255, 239, 130, ${(a * 0.65).toFixed(2)})`;
+      ctx.fillRect(Math.round(fx - 3), Math.round(fd.y), 4, 4);
+    }
+    drawFriskOverworld(ctx, sx, y, this.player.dir, this.player.walkFrame, 1.9, {
+      outfit: this.charOutfit,
+      time: this.time,
+      weapon: this.stats.weapon,
+      armor: this.stats.armor,
+      sprinting: this.player.sprinting
+    });
+  }
+
   _renderAntechamber(ctx) {
     // Deep twilight chamber
     ctx.fillStyle = '#07060d';
@@ -1086,13 +1165,13 @@ export class OverworldEngine {
 
     // Depth-sorted props & player (SAVE Star at 344, Relic Armory Pedestal at 465, 344)
     if (this.player.y < 344) {
-      drawFriskOverworld(ctx, this.player.x, this.player.y, this.player.dir, this.player.walkFrame);
+      this._drawPlayerSprite(ctx, this.player.x, this.player.y);
       drawSaveStar(ctx, 320, 344, this.time);
       drawRelicPedestal(ctx, 465, 344, this.time);
     } else {
       drawSaveStar(ctx, 320, 344, this.time);
       drawRelicPedestal(ctx, 465, 344, this.time);
-      drawFriskOverworld(ctx, this.player.x, this.player.y, this.player.dir, this.player.walkFrame);
+      this._drawPlayerSprite(ctx, this.player.x, this.player.y);
     }
 
     // Room Title badge
@@ -1140,11 +1219,11 @@ export class OverworldEngine {
     drawEchoFlower(ctx, 435, 328, this.time, Math.hypot(this.player.x - 435, this.player.y - 328) < 64);
 
     if (this.player.y < 344) {
-      drawFriskOverworld(ctx, this.player.x, this.player.y, this.player.dir, this.player.walkFrame);
+      this._drawPlayerSprite(ctx, this.player.x, this.player.y);
       drawSoulShrine(ctx, 525, 344, this.time);
     } else {
       drawSoulShrine(ctx, 525, 344, this.time);
-      drawFriskOverworld(ctx, this.player.x, this.player.y, this.player.dir, this.player.walkFrame);
+      this._drawPlayerSprite(ctx, this.player.x, this.player.y);
     }
 
     ctx.fillStyle = 'rgba(0,0,0,0.68)';
@@ -1181,7 +1260,7 @@ export class OverworldEngine {
       handGlow: this.hasVoidKey
     });
 
-    drawFriskOverworld(ctx, this.player.x, this.player.y, this.player.dir, this.player.walkFrame);
+    this._drawPlayerSprite(ctx, this.player.x, this.player.y);
 
     ctx.fillStyle = 'rgba(0,0,0,0.72)';
     ctx.fillRect(14, 14, 275, 28);
@@ -1205,11 +1284,11 @@ export class OverworldEngine {
     // Sans silhouette waiting ahead in shadow
     if (this.sansVisibleInCorridor) {
       const sansScreenX = 760 - camX;
-      drawSansOverworld(ctx, sansScreenX, 365, 2.55, this.encounterTriggered);
+      drawSansOverworld(ctx, sansScreenX, 365, 1.95, this.encounterTriggered);
     }
 
     // Frisk
-    drawFriskOverworld(ctx, this.player.x - camX, this.player.y, this.player.dir, this.player.walkFrame);
+    this._drawPlayerSprite(ctx, this.player.x - camX, this.player.y);
 
     // Foreground parallax pillars
     drawJudgmentHallForegroundPillars(ctx, camX);
@@ -1261,7 +1340,7 @@ export class OverworldEngine {
       ctx.fillRect(rx, 274, 8, 30);
     }
 
-    drawFriskOverworld(ctx, this.player.x, this.player.y, this.player.dir, this.player.walkFrame);
+    this._drawPlayerSprite(ctx, this.player.x, this.player.y);
 
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(14, 14, 210, 28);
@@ -1392,9 +1471,19 @@ export class OverworldEngine {
     } else if (this.fieldMenu.tab === 'STAT') {
       const wSpec = WEAPONS[this.stats.weapon] || WEAPONS['Real Knife'];
       const aSpec = ARMORS[this.stats.armor] || ARMORS['The Locket'];
+      const outfitSpec = CHAR_OUTFITS[this.charOutfit] || CHAR_OUTFITS.frisk;
       ctx.fillStyle = '#000000';
       ctx.fillRect(194, 36, 412, 310);
       ctx.strokeRect(194, 36, 412, 310);
+
+      // Framed 72x72 Pixel-Art Player Portrait
+      ctx.fillStyle = '#0b0a14';
+      ctx.fillRect(512, 50, 76, 76);
+      ctx.strokeStyle = outfitSpec.badgeColor || '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(512, 50, 76, 76);
+      drawDialoguePortrait(ctx, 514, 52, `player_${outfitSpec.id}`, 0);
+
       ctx.fillStyle = '#ffffff';
       ctx.font = '13px "Press Start 2P", monospace';
       ctx.fillText(`"${this.stats.name}"`, 216, 70);
@@ -1415,9 +1504,13 @@ export class OverworldEngine {
       ctx.font = '10px "Press Start 2P", monospace';
       ctx.fillText(`  ${aSpec.shortPerk}`, 216, 262);
 
+      ctx.fillStyle = outfitSpec.badgeColor || '#c084fc';
+      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.fillText(`STYLE: ${outfitSpec.name}`, 216, 294);
+
       ctx.fillStyle = '#9090a8';
       ctx.font = '9px "Press Start 2P", monospace';
-      ctx.fillText('Swap gear at Relic Armory Pedestal', 216, 316);
+      ctx.fillText('Swap gear at Pedestal / [X] Back', 216, 326);
     } else if (this.fieldMenu.tab === 'CELL') {
       ctx.fillStyle = '#000000';
       ctx.fillRect(194, 36, 360, 140);
@@ -1586,8 +1679,11 @@ export class OverworldEngine {
           fm.idx = i;
           audio.menuMove();
         }
-      } else if (fm.tab === 'ITEM' && x >= 194 && x <= 554 && y >= 50 && y <= 310) {
-        const idx = Math.floor((y - 54) / 31);
+      } else if (fm.tab === 'ITEM' && x >= 194 && x <= 554 && y >= 50 && y <= 316) {
+        const compact = this.inventory.length > 8;
+        const rowStep = compact ? 25 : 31;
+        const baseY = compact ? 52 : 54;
+        const idx = Math.floor((y - baseY) / rowStep);
         if (idx >= 0 && idx < this.inventory.length && fm.subIdx !== idx) {
           fm.subIdx = idx;
           audio.menuMove();
@@ -1634,8 +1730,11 @@ export class OverworldEngine {
         }
         return;
       }
-      if (fm.tab === 'ITEM' && x >= 194 && x <= 554 && y >= 50 && y <= 310 && this.inventory.length > 0) {
-        const idx = Math.floor((y - 54) / 31);
+      if (fm.tab === 'ITEM' && x >= 194 && x <= 554 && y >= 50 && y <= 316 && this.inventory.length > 0) {
+        const compact = this.inventory.length > 8;
+        const rowStep = compact ? 25 : 31;
+        const baseY = compact ? 52 : 54;
+        const idx = Math.floor((y - baseY) / rowStep);
         if (idx >= 0 && idx < this.inventory.length) {
           fm.subIdx = idx;
           fireKey('KeyZ');
